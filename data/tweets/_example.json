@@ -1,0 +1,13 @@
+{
+  "politician": "annalena_baerbock",
+  "name": "Annalena Baerbock",
+  "party": "gruene",
+  "tweets": [
+    {
+      "text": "Klimaschutz ist Sicherheitspolitik.",
+      "date": "2024-03-12",
+      "topic": "klima",
+      "source_url": "https://example.com/tweet/123"
+    }
+  ]
+}

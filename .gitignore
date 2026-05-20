@@ -1,0 +1,41 @@
+# Python / uv
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.python-version
+
+# Project Artifacts
+.env
+.env.*
+!.env.example
+chromadb/*
+!chromadb/.gitkeep
+logs/*
+!logs/.gitkeep
+*.log
+
+# Node
+node_modules/
+dist/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Data – nicht ins Repo
+data/manifestos/*
+!data/manifestos/.gitkeep
+data/tweets/*
+!data/tweets/_example.json
+data/eval/goldset.json
+
+# Caching
+.ruff_cache/
+.pytest_cache/

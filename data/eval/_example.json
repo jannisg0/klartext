@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "questions": [
+    {
+      "id": "q001",
+      "question": "Was sagt die SPD zur Vermögensteuer?",
+      "party_filter": ["spd"],
+      "politician": null,
+      "expected_chunks": ["spd_p12_c3", "spd_p13_c1"],
+      "expected_answer_contains": ["Vermögensteuer", "Wiedereinführung"],
+      "notes": "Erwartet wird Bezug auf Vermögensteuer-Position im SPD-Programm"
+    }
+  ]
+}
