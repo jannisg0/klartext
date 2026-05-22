@@ -40,7 +40,9 @@ async function* parseSse(reader) {
   for (;;) {
     const { value, done } = await reader.read()
     if (done) break
-    buffer += decoder.decode(value, { stream: true })
+    // sse-starlette emits CRLF line endings; normalize to LF so the
+    // event-block delimiter \n\n works regardless of upstream style.
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
     while (true) {
       const sep = buffer.indexOf('\n\n')
       if (sep === -1) break
