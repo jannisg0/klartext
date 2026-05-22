@@ -1,85 +1,126 @@
 # Klartext
 
-Klartext ist ein lokaler politischer RAG-Chatbot für ein Hochschulprojekt.
-Er beantwortet Fragen zu Wahlprogrammen auf Basis verifizierter
-Quellenangaben und kann optional im Stil ausgewählter Politiker:innen
-antworten. Die Pipeline kombiniert Hybrid Retrieval (Dense + Sparse + RRF),
-Cross-Encoder Reranking, Contextual Chunks und post-hoc Citation
-Verification. Alles läuft lokal nativ auf Apple Silicon via MLX – keine
-Daten verlassen den Rechner.
+**Lokaler RAG-Chatbot für deutsche Wahlprogramme, mit verifizierten Quellen.**
 
-## Stack
+Klartext beantwortet politische Fragen ausschließlich auf Basis
+der Wahlprogramme im Repository. Jede Aussage trägt ihre Quelle als
+`[PARTEI – Seite X]`-Pille bei sich; ein post-hoc Citation-Verifier
+markiert hallucinierte Belege rot. Alles läuft lokal auf Apple
+Silicon — keine API-Keys, kein Datenabfluss.
 
-- **Python ≥3.11**, Package Manager: **uv**
-- **LLM (MLX)**: `mlx-community/gemma-4-e4b-it-OptiQ-4bit`
-  (Haupt + Hilfs – ein Gewichtssatz, beide Rollen). Per
-  `LLM_BACKEND=ollama` lässt sich der alte Ollama-Pfad (`qwen3:14b` /
-  `qwen3:4b`) für A/B-Vergleiche reaktivieren.
-- **Embeddings**: `BAAI/bge-m3` via FlagEmbedding (dense + sparse)
-- **Reranker**: `mlx-community/bge-reranker-v2-m3-4bit` (MLX), Fallback
-  auf `BAAI/bge-reranker-v2-m3` via sentence-transformers
-- **Vector DB**: ChromaDB (lokal, persistiert)
-- **Sparse Index**: `rank_bm25`
-- **PDF-Parsing**: PyMuPDF
-- **Backend**: FastAPI + Server-Sent Events
-- **Frontend**: React (Vite) + Tailwind
-- **Eval**: ragas + manuell kuratiertes Goldset
-- **Linting**: ruff via pre-commit
-- **Logging**: structlog (JSON)
+Optionaler **Persona-Modus** lässt das Modell im Stil ausgewählter
+Politiker:innen antworten, mit explizitem `[Stil-Imitation – keine
+echten Zitate]`-Footer.
 
-## Setup
+---
 
-1. `brew install uv git` (Apple Silicon Mac vorausgesetzt)
-2. `uv sync` (lädt mlx-lm + FlagEmbedding etc.)
-3. `uv run pre-commit install`
-4. `cp .env.example .env` und ggf. anpassen
-5. Wahlprogramm-PDFs in `data/manifestos/` ablegen (z.B. `spd.pdf`, `cdu.pdf`, ...)
-6. Tweet-JSONs in `data/tweets/` ablegen (Format: siehe `_example.json`)
-7. `data/eval/goldset.json` mit Q&A-Paaren befüllen (~30-50)
-8. `uv run python scripts/ingest.py` (erster Lauf zieht das MLX-Modell
-   von HuggingFace, ~5 GB; danach gecached)
-9. `uv run python scripts/eval.py` (Baseline messen)
-10. `uv run uvicorn backend.main:app --reload --port 8000`
-11. `cd frontend && npm install && npm run dev`
+## Wie es funktioniert
 
-Wer den Ollama-Pfad bevorzugt: `LLM_BACKEND=ollama` setzen, `ollama serve`
-laufen lassen und `ollama pull qwen3:14b qwen3:4b`.
+```
+PDF  →  Parser  →  Chunker  →  Contextual Enrichment  →  Embedding
+                                                            │
+                            ┌───────────────────────────────┘
+                            ▼
+                    ChromaDB + BM25-Index
+                            │
+User-Query  ──►  Hybrid Retrieval (Dense + Sparse + RRF)
+                            │
+                            ▼
+                    Cross-Encoder Rerank
+                            │
+                            ▼
+              Prompt-Builder (mit Citation Whitelist)
+                            │
+                            ▼
+              MLX-LLM streamt Antwort (Server-Sent Events)
+                            │
+                            ▼
+              Citation-Verifier prüft jede [PARTEI – Seite X]
+```
 
-## Daten beschaffen
+Volldetail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) und
+[`docs/PIPELINE.md`](docs/PIPELINE.md).
 
-- **Wahlprogramme**: Offizielle PDFs der Parteien (Bundestagswahl, Landtagswahlen).
-  In `data/manifestos/` als `<party>.pdf` ablegen (`spd.pdf`, `cdu.pdf`, etc.).
-- **Tweets**: Manuell kuratierte JSON-Sammlung pro Politiker:in (~20-30 Tweets,
-  Format siehe `data/tweets/_example.json`). Realtime-Scraping ist NICHT
-  Bestandteil des Projekts – Fokus liegt auf reproduzierbarer Qualität.
-- **Goldset**: Eval-Fragen mit erwarteten Quellen und Antwort-Substrings
-  manuell schreiben (`data/eval/goldset.json`), Format siehe `_example.json`.
+---
 
-## Pipeline-Übersicht
+## Stack auf einen Blick
 
-Bei jeder Frage werden zunächst alternative Formulierungen via dem
-Helper-Modell (MLX Gemma 4 E4B, oder Ollama-Helper im Escape-Hatch)
-generiert, dann parallel **Dense** (BGE-M3 + ChromaDB) und **Sparse** (BM25)
-Retrieval durchgeführt. Die Ergebnislisten werden via **Reciprocal Rank
-Fusion** kombiniert und durch einen **Cross-Encoder Reranker** auf die Top 5
-Chunks reduziert. Das LLM bekommt nur diese Top-Chunks plus strikte
-Citation-Regeln. Nach der Generation prüft ein **Citation Verifier** per
-Regex, dass jede `[PARTEI – Seite X]`-Referenz tatsächlich aus dem
-Kontext stammt – unverifizierte Citations werden als Warning im SSE-Stream
-markiert.
+| Schicht | Komponente |
+|---------|------------|
+| LLM (Default) | `qwen3.5:2b-mlx` via Ollama-MLX-Runner |
+| LLM (Escape Hatch) | `qwen3:14b` via Ollama (`LLM_BACKEND=ollama`) |
+| Embeddings | `BAAI/bge-m3` via FlagEmbedding (MPS) |
+| Reranker | `bge-reranker-v2-m3` via sentence-transformers |
+| Vector DB | ChromaDB (persistent) |
+| Sparse | `rank_bm25` |
+| Backend | FastAPI + sse-starlette |
+| Frontend | Vite + React + Tailwind (kein TS) |
+| Eval | `ragas` + manuell kuratiertes Goldset (Session G) |
+| Tests | pytest, 98 grün |
 
-## Qualität messen
+Warum dieser Stack: [`docs/DESIGN-DECISIONS.md`](docs/DESIGN-DECISIONS.md).
 
-`scripts/eval.py` führt das komplette System gegen das Goldset aus und
-berechnet ragas-Metriken: `context_precision`, `context_recall`,
-`faithfulness`, `answer_relevance`. Ergebnis landet als JSON + Markdown-
-Summary in `logs/`. Diese Baseline ist die Referenz für Tuning-Entscheidungen
-(Chunk-Größe, Reranking-Threshold, Embedding-Modell).
+---
+
+## Quickstart
+
+Voraussetzung: Apple Silicon (M1+), 16 GB RAM, `brew install uv ollama git`.
+
+```bash
+git clone git@github.com:jannisg0/klartext.git
+cd klartext
+uv sync
+ollama pull qwen3.5:2b-mlx
+cp .env.example .env
+# PDFs in data/manifestos/<party>.pdf ablegen
+uv run python -m scripts.ingest
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
+# in zweitem Terminal:
+cd frontend && npm install && npm run dev
+```
+
+Browser auf `http://localhost:5173/`. Volle Anleitung mit
+Voraussetzungen + Konfig-Knobs in [`docs/SETUP.md`](docs/SETUP.md).
+
+---
+
+## Status
+
+| Session | Inhalt | Status |
+|---------|--------|--------|
+| A | PDF-Parser + Chunker | abgeschlossen |
+| B | Enricher + Ingestion-CLI | abgeschlossen |
+| C | Retriever + Reranker | abgeschlossen |
+| D | Prompt-Builder + LLM + Citation-Verifier | abgeschlossen |
+| E | FastAPI-App + SSE-Streaming | abgeschlossen |
+| F + F2 | Frontend Design-Integration + Backend-Wiring | abgeschlossen |
+| MLX-Migration | Ollama-MLX-Runner als Default | abgeschlossen |
+| G | Eval-Skript (ragas) + Goldset | offen |
+| H | Tuning auf Basis Eval-Ergebnissen | offen |
+
+---
+
+## Dokumentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Pipeline-Übersicht
+- [`docs/PIPELINE.md`](docs/PIPELINE.md) — Ingestion + Runtime im Detail
+- [`docs/DESIGN-DECISIONS.md`](docs/DESIGN-DECISIONS.md) — Warum MLX,
+  warum Hybrid, warum Citation-Whitelist
+- [`docs/SETUP.md`](docs/SETUP.md) — Schritt-für-Schritt-Installation
+- [`docs/API.md`](docs/API.md) — `/health` + `/chat` SSE-Contract
+- [`docs/FRONTEND.md`](docs/FRONTEND.md) — Komponenten + Dev-Loop
+- [`docs/EVALUATION.md`](docs/EVALUATION.md) — Goldset + ragas (Session G)
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — Stolpersteine
+- [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — Code-Stil + Git-Discipline
+- [`CLAUDE.md`](CLAUDE.md) — Entwickler- + Agent-Referenz
+  (System-Prompts, vollständige Konventionen)
+
+---
 
 ## Lizenz und Disclaimer
 
 Hochschulprojekt zu Demonstrations- und Lehrzwecken. **Keine offizielle
 Wiedergabe** politischer Positionen. Im Persona-Modus erzeugt das System
-explizit **Stil-Imitationen** – keine echten Zitate der genannten Personen.
-Antworten können trotz Citation Verification fehlerhaft sein; immer gegen
-die Originalprogramme prüfen.
+explizit Stil-Imitationen — keine echten Zitate der genannten Personen.
+Antworten können trotz Citation-Verification fehlerhaft sein; immer
+gegen die Originalprogramme prüfen.
