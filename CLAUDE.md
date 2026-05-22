@@ -178,6 +178,9 @@ klartext/
 ├── .claude/
 │   └── agents/
 │       └── git-agent.md
+├── docs/
+│   └── design/
+│       └── Klartext.html      (Claude-Design Handover, Session F)
 ├── data/
 │   ├── manifestos/         (PDFs, gitignored)
 │   ├── tweets/             (JSONs, gitignored außer _example.json)

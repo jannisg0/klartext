@@ -1,0 +1,2144 @@
+<!doctype html>
+<html lang="de" class="">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Klartext – Mockup</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Tailwind config — extends, doesn't replace
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          paper:    '#F4F1EA',
+          paper2:   '#EBE7DB',
+          paper3:   '#E2DDCD',
+          ink:      '#16140F',
+          ink2:     '#3C3830',
+          ink3:     '#6C6657',
+          rule:     '#D7D0BD',
+          rule2:    '#C8C0AB',
+
+          graphite:  '#131210',
+          graphite2: '#1B1A16',
+          graphite3: '#23211C',
+          bone:      '#ECE6D3',
+          bone2:     '#A39C88',
+          bone3:     '#6E6957',
+          edge:      '#2A2823',
+          edge2:     '#37342D',
+
+          ochre:      '#B88636',
+          ochreDark:  '#D9A658',
+          ochreSoft:  '#E8D7AE',
+
+          rust:       '#9E5742',
+          rustDark:   '#C97A5C',
+
+          ver:        '#7A8463',  /* verified – muted moss */
+          verDark:    '#A6B189',
+        },
+        fontFamily: {
+          display: ['"Newsreader"', 'Georgia', 'serif'],
+          sans:    ['"Geist"', 'ui-sans-serif', 'system-ui'],
+          mono:    ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        },
+        letterSpacing: {
+          tightish: '-0.012em',
+          tightest: '-0.025em',
+        },
+        boxShadow: {
+          ring:  '0 0 0 1px rgba(22,20,15,.08)',
+          ringD: '0 0 0 1px rgba(236,230,211,.08)',
+        }
+      }
+    }
+  }
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+
+<style>
+  html, body { background:#F4F1EA; }
+  html.dark, html.dark body { background:#131210; }
+  body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+  .font-display { font-family: 'Newsreader', Georgia, serif; font-variation-settings:"opsz" 36; }
+  .font-mono { font-feature-settings:"ss01","cv01","zero"; }
+
+  /* Editorial number for the wordmark */
+  .wordmark {
+    font-family:'Newsreader', Georgia, serif;
+    font-variation-settings:"opsz" 60;
+    font-weight:400;
+    letter-spacing:-0.04em;
+  }
+
+  /* Subtle hairline rules with paper grain feel */
+  .hair  { box-shadow: inset 0 -1px 0 #D7D0BD; }
+  .dark .hair { box-shadow: inset 0 -1px 0 #2A2823; }
+
+  /* Frame label */
+  .frame-label {
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+
+  /* Citation pill — base */
+  .cite {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:1px 7px 1px 6px;
+    border-radius:3px;
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; line-height:1.5;
+    vertical-align:1px;
+    white-space:nowrap;
+    transition: background .15s ease, color .15s ease, transform .12s ease;
+    cursor:pointer;
+    border:1px solid transparent;
+  }
+  .cite .dot { width:5px; height:5px; border-radius:99px; display:inline-block; }
+
+  /* Verified */
+  .cite-ver        { background:#EFEAD8; color:#2F3A20; border-color:#D9D0AE; }
+  .cite-ver .dot   { background:#7A8463; }
+  .dark .cite-ver  { background:#23241A; color:#C8D3A8; border-color:#3A3C26; }
+  .dark .cite-ver .dot { background:#A6B189; }
+
+  /* Unverified — needs caution */
+  .cite-un         { background:transparent; color:#5C574E; border:1px dashed #BDB39A; }
+  .cite-un .dot    { background:#A39C88; }
+  .dark .cite-un   { color:#A39C88; border-color:#3F3C32; }
+
+  .cite:hover      { transform:translateY(-1px); }
+
+  /* Score bar */
+  .score-bar { background:#E2DDCD; height:3px; border-radius:99px; overflow:hidden; }
+  .dark .score-bar { background:#2A2823; }
+  .score-fill { background:#16140F; height:100%; border-radius:99px; }
+  .dark .score-fill { background:#ECE6D3; }
+  .score-fill.ver  { background:#7A8463; }
+  .dark .score-fill.ver { background:#A6B189; }
+
+  /* Streaming cursor */
+  .caret { display:inline-block; width:8px; height:1em; vertical-align:-2px; background:currentColor; margin-left:1px; animation: blink 1.1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* Subtle reveal on initial paint for start-page */
+  .reveal > * { opacity:0; transform: translateY(6px); animation: rise .9s cubic-bezier(.2,.7,.2,1) forwards; }
+  .reveal > *:nth-child(1) { animation-delay:.05s; }
+  .reveal > *:nth-child(2) { animation-delay:.18s; }
+  .reveal > *:nth-child(3) { animation-delay:.30s; }
+  .reveal > *:nth-child(4) { animation-delay:.42s; }
+  .reveal > *:nth-child(5) { animation-delay:.55s; }
+  @keyframes rise { to { opacity:1; transform:none; } }
+
+  /* Subtle paper noise – just a tiny svg, hairline grain */
+  .grain::before {
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.035; mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .8 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  .dark .grain::before { mix-blend-mode:screen; opacity:.045; }
+
+  /* "Asked-to-text" connector line on start page */
+  .quill {
+    position:relative;
+  }
+  .quill::after {
+    content:""; position:absolute; left:50%; top:100%; width:1px; height:36px; background:#D7D0BD; transform:translateX(-50%);
+  }
+  .dark .quill::after { background:#2A2823; }
+
+  /* Mobile frame */
+  .device {
+    width:390px; max-width:100%;
+    border-radius:42px;
+    box-shadow: 0 0 0 1px #D7D0BD, 0 30px 60px -30px rgba(22,20,15,.18);
+    background:#F4F1EA;
+    overflow:hidden;
+    position:relative;
+  }
+  /* .dark on device itself OR on an ancestor */
+  .dark .device,
+  .device.dark {
+    background:#131210;
+    color:#ECE6D3;
+    box-shadow: 0 0 0 1px #2A2823, 0 30px 60px -30px rgba(0,0,0,.6);
+  }
+  .device-notch { position:absolute; top:10px; left:50%; transform:translateX(-50%); width:104px; height:28px; background:#0a0908; border-radius:99px; z-index:50; }
+
+  /* Pretty scrollbars within mocked panes */
+  .pane::-webkit-scrollbar { width:10px; height:10px; }
+  .pane::-webkit-scrollbar-thumb { background:#D7D0BD; border-radius:99px; border:3px solid transparent; background-clip:padding-box; }
+  .dark .pane::-webkit-scrollbar-thumb { background:#2A2823; border-color:transparent; background-clip:padding-box; }
+
+  /* Filter checkbox – custom */
+  .check {
+    width:14px; height:14px; border-radius:3px;
+    border:1px solid #C8C0AB;
+    display:inline-flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .dark .check { border-color:#3F3C32; }
+  .check.on { background:#16140F; border-color:#16140F; }
+  .dark .check.on { background:#ECE6D3; border-color:#ECE6D3; }
+  .check.on svg { color:#F4F1EA; }
+  .dark .check.on svg { color:#131210; }
+
+  /* Radio dot */
+  .radio { width:14px; height:14px; border-radius:99px; border:1px solid #C8C0AB; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .dark .radio { border-color:#3F3C32; }
+  .radio.on { border-color:#16140F; }
+  .dark .radio.on { border-color:#ECE6D3; }
+  .radio.on::after { content:""; width:6px; height:6px; border-radius:99px; background:#16140F; }
+  .dark .radio.on::after { background:#ECE6D3; }
+
+  /* Party tile (abstract – no real party colors) */
+  .party-tile {
+    width:22px; height:22px; border-radius:3px;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono', ui-monospace, monospace; font-size:10px; font-weight:600;
+    background:#E2DDCD; color:#3C3830;
+    letter-spacing:.02em;
+  }
+  .dark .party-tile { background:#23211C; color:#A39C88; }
+  .party-tile.sm { width:18px; height:18px; font-size:9px; }
+
+  /* Smooth focus ring */
+  .ring-soft:focus { outline:none; box-shadow: 0 0 0 3px rgba(184,134,54,.18), inset 0 0 0 1px #B88636; }
+
+  /* Section dividers between mockup frames */
+  .frame-wrap { padding: 56px 28px 56px; }
+  @media (max-width: 740px) { .frame-wrap { padding: 32px 14px; } }
+
+  /* Sticky state nav */
+  .state-nav a { display:block; padding:6px 10px; border-radius:4px; color:#6C6657; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:11px; letter-spacing:.04em; }
+  .state-nav a:hover { background:#EBE7DB; color:#16140F; }
+  .dark .state-nav a { color:#8E887B; }
+  .dark .state-nav a:hover { background:#1B1A16; color:#ECE6D3; }
+
+  /* Persona ribbon */
+  .persona-stripes {
+    background-image: repeating-linear-gradient(135deg,
+      transparent 0 8px, rgba(184,134,54,.08) 8px 9px);
+  }
+  .dark .persona-stripes {
+    background-image: repeating-linear-gradient(135deg,
+      transparent 0 8px, rgba(217,166,88,.10) 8px 9px);
+  }
+
+  /* Slight letterpress for serif headlines */
+  .press { text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+  .dark .press { text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+
+  /* Hairlines that work in both modes via currentColor */
+  .hr-x { height:1px; background:currentColor; opacity:.12; }
+</style>
+</head>
+
+<body class="text-ink dark:text-bone">
+
+<!-- ====================================================================
+     FLOATING UI:  THEME TOGGLE  +  STATE NAVIGATOR
+==================================================================== -->
+<div class="fixed top-4 right-4 z-[60] flex items-center gap-2">
+  <button id="themeToggle"
+    class="group flex items-center gap-2 px-3 h-9 rounded-md text-[12px] font-medium
+           bg-paper2 hover:bg-paper3 text-ink shadow-ring
+           dark:bg-graphite2 dark:hover:bg-graphite3 dark:text-bone dark:shadow-ringD
+           transition">
+    <svg class="hidden dark:block" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="dark:hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    <span class="dark:hidden">Hell</span>
+    <span class="hidden dark:inline">Dunkel</span>
+  </button>
+</div>
+
+<aside class="state-nav fixed top-1/2 left-4 -translate-y-1/2 z-[55] hidden lg:block
+              bg-paper/85 dark:bg-graphite/85 backdrop-blur
+              border border-rule dark:border-edge rounded-lg p-2 w-[180px]">
+  <div class="px-2 py-1 mb-1 frame-label text-ink3 dark:text-bone3">Zustände</div>
+  <a href="#s1">01 · Start hell</a>
+  <a href="#s2">02 · Start dunkel</a>
+  <a href="#s3">03 · Chat leer</a>
+  <a href="#s4">04 · Chat aktiv</a>
+  <a href="#s5">05 · Chat aktiv · Dunkel</a>
+  <a href="#s6">06 · Persona-Modus</a>
+  <a href="#s7">07 · Streaming</a>
+  <a href="#s8">08 · Fehler · Leere Treffer</a>
+  <a href="#s9">09 · Quellen eingeklappt</a>
+  <a href="#s10">10 · Mobil</a>
+</aside>
+
+<!-- ====================================================================
+     STATE 01 – START PAGE  (LIGHT)
+==================================================================== -->
+<section id="s1" class="frame-wrap">
+  <div class="max-w-[1280px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">01 · Start · Hell</p>
+
+    <div class="relative grain rounded-xl overflow-hidden border border-rule dark:border-edge
+                bg-paper dark:bg-graphite h-[760px] flex flex-col">
+
+      <!-- top bar -->
+      <header class="flex items-center justify-between px-6 h-14 hair">
+        <div class="flex items-center gap-2 text-[12px] font-mono text-ink3 dark:text-bone3">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-ver"></span>
+          <span>Lokal · 7 Wahlprogramme · Stand 09 / 2026</span>
+        </div>
+        <div class="flex items-center gap-4 text-[12px] text-ink3 dark:text-bone3">
+          <span class="font-mono">⌘K</span>
+          <span class="opacity-60">Verlauf</span>
+        </div>
+      </header>
+
+      <!-- centerpiece -->
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 reveal">
+        <p class="frame-label text-ink3 dark:text-bone3 mb-6 tracking-[0.3em]">— K L A R T E X T —</p>
+
+        <h1 class="wordmark text-[112px] leading-[0.95] text-ink dark:text-bone press text-center">
+          Was möchtest<br/>du wissen<span class="text-ochre">?</span>
+        </h1>
+
+        <p class="mt-6 max-w-[520px] text-center text-[15px] leading-[1.6] text-ink2 dark:text-bone2">
+          Klartext beantwortet politische Fragen ausschließlich aus den Wahlprogrammen
+          der im Bundestag vertretenen Parteien. Jede Aussage trägt ihre Quelle bei sich.
+        </p>
+
+        <!-- input -->
+        <div class="mt-10 w-full max-w-[680px] flex items-center
+                    bg-white/70 dark:bg-graphite2 border border-rule dark:border-edge
+                    rounded-lg shadow-ring dark:shadow-ringD focus-within:border-ochre dark:focus-within:border-ochreDark">
+          <span class="pl-5 pr-3 text-ink3 dark:text-bone3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7h12M4 12h16M4 17h8"/></svg>
+          </span>
+          <input
+            type="text"
+            placeholder="Stelle eine Frage zu Steuern, Klima, Bildung, Rente …"
+            class="flex-1 h-14 bg-transparent text-[15px] text-ink dark:text-bone placeholder:text-ink3/70 dark:placeholder:text-bone3 ring-soft" />
+          <button class="mr-2 my-2 h-10 px-4 rounded-md bg-ink text-paper dark:bg-bone dark:text-graphite font-medium text-[13px] flex items-center gap-2">
+            Fragen
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <!-- example chips -->
+        <div class="mt-7 w-full max-w-[680px]">
+          <p class="frame-label text-ink3 dark:text-bone3 mb-3">Beispielfragen</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="text-left px-4 py-3 rounded-md border border-rule dark:border-edge hover:bg-paper2 dark:hover:bg-graphite2 transition text-[13px] text-ink2 dark:text-bone2">
+              Wie unterscheiden sich die Parteien beim Mindestlohn?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-rule dark:border-edge hover:bg-paper2 dark:hover:bg-graphite2 transition text-[13px] text-ink2 dark:text-bone2">
+              Welche Pläne gibt es für den Wohnungsmarkt?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-rule dark:border-edge hover:bg-paper2 dark:hover:bg-graphite2 transition text-[13px] text-ink2 dark:text-bone2">
+              Wer fordert eine Reform der Schuldenbremse?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-rule dark:border-edge hover:bg-paper2 dark:hover:bg-graphite2 transition text-[13px] text-ink2 dark:text-bone2">
+              Wie positionieren sich die Parteien zur Wehrpflicht?
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer hairline -->
+      <footer class="px-6 h-12 flex items-center justify-between hair text-[12px] text-ink3 dark:text-bone3">
+        <span>Klartext kann irren – prüfe die Quellen.</span>
+        <span class="font-mono">v 0.4 · lokal</span>
+      </footer>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 02 – START PAGE  (DARK)
+==================================================================== -->
+<section id="s2" class="frame-wrap pt-0">
+  <div class="max-w-[1280px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">02 · Start · Dunkel</p>
+
+    <div class="dark relative grain rounded-xl overflow-hidden border border-edge bg-graphite h-[760px] flex flex-col text-bone">
+
+      <header class="flex items-center justify-between px-6 h-14 hair">
+        <div class="flex items-center gap-2 text-[12px] font-mono text-bone3">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-verDark"></span>
+          <span>Lokal · 7 Wahlprogramme · Stand 09 / 2026</span>
+        </div>
+        <div class="flex items-center gap-4 text-[12px] text-bone3">
+          <span class="font-mono">⌘K</span>
+          <span class="opacity-60">Verlauf</span>
+        </div>
+      </header>
+
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center px-6">
+        <p class="frame-label text-bone3 mb-6 tracking-[0.3em]">— K L A R T E X T —</p>
+
+        <h1 class="wordmark text-[112px] leading-[0.95] press text-center">
+          Was möchtest<br/>du wissen<span class="text-ochreDark">?</span>
+        </h1>
+
+        <p class="mt-6 max-w-[520px] text-center text-[15px] leading-[1.6] text-bone2">
+          Klartext beantwortet politische Fragen ausschließlich aus den Wahlprogrammen
+          der im Bundestag vertretenen Parteien. Jede Aussage trägt ihre Quelle bei sich.
+        </p>
+
+        <div class="mt-10 w-full max-w-[680px] flex items-center
+                    bg-graphite2 border border-edge rounded-lg shadow-ringD focus-within:border-ochreDark">
+          <span class="pl-5 pr-3 text-bone3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7h12M4 12h16M4 17h8"/></svg>
+          </span>
+          <input
+            type="text"
+            placeholder="Stelle eine Frage zu Steuern, Klima, Bildung, Rente …"
+            class="flex-1 h-14 bg-transparent text-[15px] text-bone placeholder:text-bone3 ring-soft" />
+          <button class="mr-2 my-2 h-10 px-4 rounded-md bg-bone text-graphite font-medium text-[13px] flex items-center gap-2">
+            Fragen
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <div class="mt-7 w-full max-w-[680px]">
+          <p class="frame-label text-bone3 mb-3">Beispielfragen</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="text-left px-4 py-3 rounded-md border border-edge hover:bg-graphite2 transition text-[13px] text-bone2">
+              Wie unterscheiden sich die Parteien beim Mindestlohn?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-edge hover:bg-graphite2 transition text-[13px] text-bone2">
+              Welche Pläne gibt es für den Wohnungsmarkt?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-edge hover:bg-graphite2 transition text-[13px] text-bone2">
+              Wer fordert eine Reform der Schuldenbremse?
+            </button>
+            <button class="text-left px-4 py-3 rounded-md border border-edge hover:bg-graphite2 transition text-[13px] text-bone2">
+              Wie positionieren sich die Parteien zur Wehrpflicht?
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="px-6 h-12 flex items-center justify-between hair text-[12px] text-bone3">
+        <span>Klartext kann irren – prüfe die Quellen.</span>
+        <span class="font-mono">v 0.4 · lokal</span>
+      </footer>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     REUSABLE CHAT SHELL (rendered multiple times, each with state diffs)
+     Inlined as a template-via-copy below
+==================================================================== -->
+
+<!-- ====================================================================
+     STATE 03 – CHAT EMPTY (LIGHT)
+==================================================================== -->
+<section id="s3" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">03 · Chat · Leerer Zustand</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_380px] [grid-template-rows:minmax(0,1fr)] h-[820px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <!-- SIDEBAR (filters) -->
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <!-- Brand row -->
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+
+        <div class="px-5 py-5 overflow-y-auto pane">
+
+          <!-- New conversation -->
+          <button class="w-full h-10 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14"/></svg>
+            Neue Unterhaltung
+          </button>
+
+          <!-- Parteien filter -->
+          <div class="mt-8">
+            <div class="flex items-center justify-between">
+              <p class="frame-label text-ink3">Parteien</p>
+              <button class="text-[11px] text-ink3 hover:text-ink underline underline-offset-2">Alle</button>
+            </div>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>CDU / CSU</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>SPD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Bündnis 90 / Grüne</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>FDP</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Die Linke</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>AfD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>BSW</span>
+              </label>
+            </div>
+            <p class="mt-3 text-[11px] text-ink3 font-mono">7 / 7 aktiv</p>
+          </div>
+
+          <!-- Persona -->
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Persona</p>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="radio on"></span>
+                <span>Neutraler Modus</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in A · Partei X</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in B · Partei Y</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in C · Partei Z</span>
+              </label>
+            </div>
+            <p class="mt-3 text-[11px] text-ink3 leading-snug">
+              Persona-Modus imitiert den Sprachstil, erfindet jedoch keine Fakten.
+              Quellen bleiben dieselben.
+            </p>
+          </div>
+
+          <!-- Verlauf -->
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Verlauf</p>
+            <ul class="mt-3 space-y-1 text-[13px]">
+              <li class="px-2 py-1.5 rounded text-ink hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Klima &amp; CO₂-Bepreisung</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">Mo</span>
+              </li>
+              <li class="px-2 py-1.5 rounded text-ink2 hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Schuldenbremse</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">So</span>
+              </li>
+              <li class="px-2 py-1.5 rounded text-ink2 hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Mindestlohn 2026</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">Fr</span>
+              </li>
+              <li class="px-2 py-1.5 rounded text-ink2 hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Bildungsföderalismus</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">Do</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Reset row -->
+        <div class="mt-auto px-5 h-12 flex items-center justify-between border-t border-rule text-[12px]">
+          <button class="text-ink3 hover:text-ink flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+            Filter zurücksetzen
+          </button>
+          <span class="font-mono text-ink3">⌘R</span>
+        </div>
+      </aside>
+
+      <!-- MAIN CONVERSATION (empty) -->
+      <main class="relative flex flex-col min-h-0">
+        <!-- top toolbar -->
+        <div class="h-14 px-6 flex items-center justify-between hair">
+          <div class="flex items-center gap-3 text-[13px] text-ink2">
+            <span class="frame-label text-ink3">Aktive Auswahl</span>
+            <span class="text-ink3 mx-2">·</span>
+            <span class="text-ink3">Neutraler Modus</span>
+          </div>
+          <div class="flex items-center gap-2 text-[12px] text-ink3">
+            <button class="px-2 h-7 rounded hover:bg-paper2">Teilen</button>
+            <button class="px-2 h-7 rounded hover:bg-paper2">Export</button>
+          </div>
+        </div>
+
+        <!-- empty body — hero with prominent input -->
+        <div class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 py-8">
+          <div class="w-full max-w-[560px] text-center">
+            <p class="frame-label text-ink3 mb-4">— Bereit —</p>
+            <h2 class="wordmark text-[44px] leading-[1.05] text-ink press">
+              Stelle deine Frage.<br/>
+              Klartext zitiert die Wahlprogramme<span class="text-ochre">.</span>
+            </h2>
+            <p class="mt-4 text-[14px] text-ink2 leading-relaxed">
+              Antworten erscheinen mit Quellenangabe je Partei und Seite.
+              Stellen, die nicht im Originaltext bestätigt werden konnten,
+              sind als <span class="cite cite-un mx-0.5"><span class="dot"></span>nicht verifiziert</span> markiert.
+            </p>
+
+            <!-- hero input -->
+            <div class="mt-8 flex items-end gap-2 bg-white/80 border border-rule rounded-lg shadow-ring focus-within:border-ochre p-2 text-left">
+              <textarea
+                rows="2"
+                placeholder="Was möchtest du wissen?"
+                class="flex-1 bg-transparent text-[15px] text-ink placeholder:text-ink3/70 resize-none px-3 py-2 ring-soft outline-none leading-relaxed"></textarea>
+              <button class="h-10 px-4 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center gap-2 self-end">
+                Senden
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+            <p class="mt-2 text-[11px] text-ink3 text-left px-1">Enter sendet · Shift+Enter neue Zeile</p>
+
+            <!-- example chips -->
+            <div class="mt-7 text-left">
+              <p class="frame-label text-ink3 mb-2">Beispielfragen</p>
+              <div class="grid grid-cols-2 gap-2">
+                <button class="text-left px-3 py-2.5 rounded-md border border-rule hover:bg-paper2 transition text-[12.5px] text-ink2 leading-snug">
+                  Unterschiede bei der CO₂-Bepreisung?
+                </button>
+                <button class="text-left px-3 py-2.5 rounded-md border border-rule hover:bg-paper2 transition text-[12.5px] text-ink2 leading-snug">
+                  Wer will die Schuldenbremse reformieren?
+                </button>
+                <button class="text-left px-3 py-2.5 rounded-md border border-rule hover:bg-paper2 transition text-[12.5px] text-ink2 leading-snug">
+                  Pläne für den Wohnungsmarkt?
+                </button>
+                <button class="text-left px-3 py-2.5 rounded-md border border-rule hover:bg-paper2 transition text-[12.5px] text-ink2 leading-snug">
+                  Position zur Wehrpflicht?
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- footer hint -->
+        <div class="px-6 h-10 flex items-center justify-end hair">
+          <p class="text-[11px] text-ink3">Klartext kann irren – prüfe die Quellen.</p>
+        </div>
+      </main>
+
+      <!-- SOURCES PANEL (empty) -->
+      <aside class="border-l border-rule flex flex-col bg-paper min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-ink3">Quellen</span>
+            <span class="font-mono text-[11px] text-ink3">0 / 5</span>
+          </div>
+          <button class="text-ink3 hover:text-ink" title="Einklappen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 flex items-center justify-center px-6 text-center">
+          <div>
+            <div class="mx-auto w-12 h-12 rounded-full border border-rule flex items-center justify-center text-ink3">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+            </div>
+            <p class="mt-4 text-[13px] text-ink2 leading-relaxed max-w-[240px] mx-auto">
+              Sobald du fragst, erscheinen hier die fünf passendsten Stellen aus den Wahlprogrammen.
+            </p>
+            <p class="mt-3 frame-label text-ink3">Top 5 · sortiert nach Relevanz</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 04 – CHAT ACTIVE (LIGHT)
+==================================================================== -->
+<section id="s4" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">04 · Chat · Aktiv mit Quellen</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_380px] [grid-template-rows:minmax(0,1fr)] h-[920px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <!-- SIDEBAR -->
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 overflow-y-auto pane flex-1">
+          <button class="w-full h-10 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14"/></svg>
+            Neue Unterhaltung
+          </button>
+
+          <div class="mt-8">
+            <div class="flex items-center justify-between">
+              <p class="frame-label text-ink3">Parteien</p>
+              <button class="text-[11px] text-ink3 hover:text-ink underline underline-offset-2">Alle</button>
+            </div>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>CDU / CSU</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>SPD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Bündnis 90 / Grüne</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="check"></span>
+                <span>FDP</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Die Linke</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="check"></span>
+                <span>AfD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>BSW</span>
+              </label>
+            </div>
+            <p class="mt-3 text-[11px] text-ink3 font-mono">5 / 7 aktiv</p>
+          </div>
+
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Persona</p>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="radio on"></span>
+                <span>Neutraler Modus</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in A · Partei X</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in B · Partei Y</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in C · Partei Z</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Verlauf</p>
+            <ul class="mt-3 space-y-1 text-[13px]">
+              <li class="px-2 py-1.5 rounded bg-paper2 text-ink flex items-center justify-between">
+                <span class="truncate">CO₂-Bepreisung 2026</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">jetzt</span>
+              </li>
+              <li class="px-2 py-1.5 rounded text-ink2 hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Schuldenbremse</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">So</span>
+              </li>
+              <li class="px-2 py-1.5 rounded text-ink2 hover:bg-paper2 cursor-pointer flex items-center justify-between">
+                <span class="truncate">Mindestlohn 2026</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">Fr</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="px-5 h-12 flex items-center justify-between border-t border-rule text-[12px]">
+          <button class="text-ink3 hover:text-ink flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+            Filter zurücksetzen
+          </button>
+          <span class="font-mono text-ink3">⌘R</span>
+        </div>
+      </aside>
+
+      <!-- CONVERSATION -->
+      <main class="relative flex flex-col min-h-0">
+        <div class="h-14 px-6 flex items-center justify-between hair">
+          <div class="flex items-center gap-3 text-[13px] text-ink2">
+            <span class="frame-label text-ink3">Auswahl</span>
+            <span class="text-ink3 mx-2">·</span>
+            <span class="text-ink3">Neutraler Modus</span>
+          </div>
+          <div class="flex items-center gap-2 text-[12px] text-ink3">
+            <button class="px-2 h-7 rounded hover:bg-paper2">Teilen</button>
+            <button class="px-2 h-7 rounded hover:bg-paper2">Export</button>
+          </div>
+        </div>
+
+        <!-- messages -->
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+
+          <!-- user message -->
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-ink3">Frage · 14:22</span>
+            </div>
+            <div class="text-[18px] font-display text-ink leading-snug">
+              Wie unterscheiden sich die im Bundestag vertretenen Parteien
+              bei der CO₂-Bepreisung – Höhe, Tempo, soziale Abfederung?
+            </div>
+          </div>
+
+          <!-- assistant message -->
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span class="frame-label text-ink3">Antwort · Klartext</span>
+              <span class="font-mono text-[11px] text-ink3">5 Parteien · 12 Belege</span>
+            </div>
+
+            <article class="text-[15px] leading-[1.75] text-ink space-y-4">
+              <p>
+                Die fünf einbezogenen Parteien sind sich einig, dass eine CO₂-Bepreisung
+                Teil der Klimapolitik bleiben soll – sie unterscheiden sich vor allem in
+                <strong class="font-medium">Tempo</strong>, <strong class="font-medium">Höhe</strong>
+                und der Frage der sozialen Abfederung.
+              </p>
+
+              <p>
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 12</span>
+                und
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 47</span>
+                setzen auf einen festen Preispfad mit jährlichen Anhebungen; die
+                Einnahmen sollen über ein „Klimageld" pro Kopf zurückfließen.
+                <span class="cite cite-ver"><span class="dot"></span>Linke · S. 31</span>
+                fordert höhere Einstiegspreise nur für große Emittenten und eine
+                vollständige Befreiung von Haushalten mit niedrigem Einkommen.
+              </p>
+
+              <p>
+                Die
+                <span class="cite cite-ver"><span class="dot"></span>CDU/CSU · S. 8</span>
+                betont einen marktwirtschaftlichen Mechanismus über den
+                EU-Emissionshandel und lehnt eine zusätzliche nationale Anhebung ab.
+                Das
+                <span class="cite cite-un"><span class="dot"></span>BSW · S. 22</span>
+                verweist im Wahlprogramm auf eine „pragmatische Aussetzung" während
+                der Heizperiode – diese Aussage ließ sich gegen den Originaltext nicht
+                eindeutig bestätigen.
+              </p>
+
+              <p>
+                Beim Thema Rückerstattung ist die Bandbreite am größten: von einem
+                pauschalen Pro-Kopf-Betrag
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 49</span>
+                über ein einkommensabhängiges Modell
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 14</span>
+                bis hin zu einer Senkung der Stromsteuer als Kompensation
+                <span class="cite cite-ver"><span class="dot"></span>CDU/CSU · S. 9</span>.
+              </p>
+            </article>
+
+            <!-- legend -->
+            <div class="mt-6 flex items-center gap-4 text-[11px] text-ink3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ver"></span>verifiziert · Originaltext</span>
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ink3"></span>nicht verifiziert · prüfen</span>
+            </div>
+
+            <!-- action row -->
+            <div class="mt-4 flex items-center gap-1 text-ink3">
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>
+                Kopieren
+              </button>
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+                Neu erzeugen
+              </button>
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 10v12M15 10V5a3 3 0 0 0-6 0v5H5l2 12h10l2-12h-4Z"/></svg>
+                Hilfreich
+              </button>
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 14V2M9 14V19a3 3 0 0 0 6 0v-5h4L17 2H7L5 14h4Z"/></svg>
+                Unklar
+              </button>
+            </div>
+          </div>
+
+          <!-- follow-up user message -->
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-ink3">Frage · 14:24</span>
+            </div>
+            <div class="text-[18px] font-display text-ink leading-snug">
+              Und wer fordert konkret, die Einnahmen direkt pro Kopf zurückzuzahlen?
+            </div>
+          </div>
+
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span class="frame-label text-ink3">Antwort · Klartext</span>
+              <span class="font-mono text-[11px] text-ink3">2 Parteien · 3 Belege</span>
+            </div>
+            <article class="text-[15px] leading-[1.75] text-ink space-y-3">
+              <p>
+                Eine pauschale Pro-Kopf-Rückerstattung („Klimageld") findet sich
+                explizit bei
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 49</span>
+                und in Grundzügen bei
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 14</span>.
+                Beide Programme nennen dieselbe Mechanik: Einnahmen aus dem nationalen
+                CO₂-Preis fließen zu 100 % zurück; die Auszahlung erfolgt über die
+                Steuer-ID.
+              </p>
+            </article>
+          </div>
+
+        </div>
+
+        <!-- input -->
+        <div class="px-8 pb-6 pt-2 border-t border-rule">
+          <div class="flex items-center gap-1.5 mb-2 overflow-x-auto">
+            <span class="frame-label text-ink3 mr-1">Vertiefen</span>
+            <button class="h-7 px-2.5 rounded-full border border-rule hover:bg-paper2 text-[12px] text-ink2 whitespace-nowrap">Was sagt die FDP dazu?</button>
+            <button class="h-7 px-2.5 rounded-full border border-rule hover:bg-paper2 text-[12px] text-ink2 whitespace-nowrap">Vergleich mit 2021</button>
+            <button class="h-7 px-2.5 rounded-full border border-rule hover:bg-paper2 text-[12px] text-ink2 whitespace-nowrap">Nur verifizierte Quellen</button>
+          </div>
+          <div class="flex items-end gap-2 bg-white/80 border border-rule rounded-lg shadow-ring focus-within:border-ochre p-2">
+            <textarea
+              rows="2"
+              placeholder="Frage stellen oder vertiefen …"
+              class="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink3/70 resize-none px-3 py-2 ring-soft outline-none leading-relaxed"></textarea>
+            <button class="h-10 px-3 rounded-md text-ink3 hover:bg-paper2 text-[12px] font-mono self-end">⏎</button>
+            <button class="h-10 px-4 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center gap-2 self-end">
+              Senden
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-ink3 px-1">Enter sendet · Shift+Enter neue Zeile · Klartext kann irren – prüfe die Quellen.</p>
+        </div>
+      </main>
+
+      <!-- SOURCES -->
+      <aside class="border-l border-rule flex flex-col bg-paper min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-ink3">Quellen</span>
+            <span class="font-mono text-[11px] text-ink3">5 / 5</span>
+          </div>
+          <div class="flex items-center gap-1 text-ink3">
+            <button class="h-7 w-7 rounded hover:bg-paper2 flex items-center justify-center" title="Sortieren">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+            </button>
+            <button class="h-7 w-7 rounded hover:bg-paper2 flex items-center justify-center" title="Einklappen">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane">
+          <!-- source 1 -->
+          <article class="px-5 py-4 border-b border-rule hover:bg-paper2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">Bündnis 90 / Grüne</div>
+                  <div class="text-[11px] text-ink3 font-mono">Klima &gt; CO₂-Bepreisung</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 47</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.93</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:93%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              „Wir führen einen verlässlichen Preispfad für CO₂ ein und geben die
+              Einnahmen vollständig pro Kopf als Klimageld zurück."
+            </p>
+            <div class="mt-3 flex items-center gap-3 text-[11px] text-ink3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ver"></span>verifiziert</span>
+              <span>·</span>
+              <button class="hover:text-ink">In Antwort markieren</button>
+            </div>
+          </article>
+
+          <!-- source 2 -->
+          <article class="px-5 py-4 border-b border-rule hover:bg-paper2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">SPD</div>
+                  <div class="text-[11px] text-ink3 font-mono">Klima &gt; Rückerstattung</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 12 – 14</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.88</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:88%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              „Die Einnahmen aus der nationalen CO₂-Bepreisung werden über die Steuer-ID
+              an die Haushalte zurückgegeben – sozial gestaffelt."
+            </p>
+            <div class="mt-3 flex items-center gap-3 text-[11px] text-ink3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ver"></span>verifiziert</span>
+              <span>·</span>
+              <button class="hover:text-ink">In Antwort markieren</button>
+            </div>
+          </article>
+
+          <!-- source 3 -->
+          <article class="px-5 py-4 border-b border-rule hover:bg-paper2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">CDU / CSU</div>
+                  <div class="text-[11px] text-ink3 font-mono">Wirtschaft &gt; Energie</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 8 – 9</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.81</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:81%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              „Den Emissionshandel auf europäischer Ebene stärken und die Stromsteuer
+              auf das EU-Mindestmaß absenken."
+            </p>
+            <div class="mt-3 flex items-center gap-3 text-[11px] text-ink3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ver"></span>verifiziert</span>
+            </div>
+          </article>
+
+          <!-- source 4 -->
+          <article class="px-5 py-4 border-b border-rule hover:bg-paper2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">Die Linke</div>
+                  <div class="text-[11px] text-ink3 font-mono">Soziales &gt; Klimagerechtigkeit</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 31</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.74</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:74%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              „Haushalte mit niedrigem Einkommen werden vollständig von der nationalen
+              CO₂-Abgabe befreit, große Emittenten stärker zur Kasse gebeten."
+            </p>
+          </article>
+
+          <!-- source 5 -->
+          <article class="px-5 py-4 border-b border-rule hover:bg-paper2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">BSW</div>
+                  <div class="text-[11px] text-ink3 font-mono">Energie &gt; Versorgungssicherheit</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 22</div>
+                <div class="font-mono text-[11px] text-ink3 mt-0.5">0.58</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill" style="width:58%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed italic">
+              „Pragmatische Aussetzung in besonders kalten Monaten" – Wortlaut im
+              Originaltext nicht eindeutig auffindbar.
+            </p>
+            <div class="mt-3 flex items-center gap-3 text-[11px] text-ink3 font-mono">
+              <span class="flex items-center gap-1.5 text-ink3"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-ink3"></span>nicht verifiziert</span>
+              <span>·</span>
+              <button class="hover:text-ink">Original öffnen</button>
+            </div>
+          </article>
+        </div>
+
+        <div class="h-12 px-5 flex items-center justify-between border-t border-rule text-[11px] text-ink3">
+          <span class="font-mono">Hybrid-Retrieval · Cross-Encoder</span>
+          <button class="hover:text-ink">Alle anzeigen →</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 05 – CHAT ACTIVE (DARK)  – condensed, same data
+==================================================================== -->
+<section id="s5" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">05 · Chat · Aktiv · Dunkel</p>
+
+    <div class="dark grid grid-cols-[300px_minmax(0,1fr)_380px] h-[920px] rounded-xl overflow-hidden border border-edge bg-graphite text-bone">
+
+      <aside class="border-r border-edge flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-bone leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 overflow-y-auto pane flex-1">
+          <button class="w-full h-10 rounded-md bg-bone text-graphite text-[13px] font-medium flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14"/></svg>
+            Neue Unterhaltung
+          </button>
+          <div class="mt-8">
+            <div class="flex items-center justify-between">
+              <p class="frame-label text-bone3">Parteien</p>
+              <button class="text-[11px] text-bone3 hover:text-bone underline underline-offset-2">Alle</button>
+            </div>
+            <div class="mt-3 space-y-1.5 text-bone">
+              <label class="flex items-center gap-3 text-[13px] py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>CDU / CSU</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>SPD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Bündnis 90 / Grüne</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-bone3 py-1 cursor-pointer">
+                <span class="check"></span>
+                <span>FDP</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>Die Linke</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-bone3 py-1 cursor-pointer">
+                <span class="check"></span>
+                <span>AfD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+                <span>BSW</span>
+              </label>
+            </div>
+            <p class="mt-3 text-[11px] text-bone3 font-mono">5 / 7 aktiv</p>
+          </div>
+
+          <div class="mt-8">
+            <p class="frame-label text-bone3">Persona</p>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-bone py-1 cursor-pointer">
+                <span class="radio on"></span>
+                <span>Neutraler Modus</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-bone3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in A · Partei X</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-bone3 py-1 cursor-pointer">
+                <span class="radio"></span>
+                <span>Politiker:in B · Partei Y</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="px-5 h-12 flex items-center justify-between border-t border-edge text-[12px]">
+          <button class="text-bone3 hover:text-bone flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+            Filter zurücksetzen
+          </button>
+          <span class="font-mono text-bone3">⌘R</span>
+        </div>
+      </aside>
+
+      <main class="relative flex flex-col min-h-0">
+        <div class="h-14 px-6 flex items-center justify-between hair">
+          <div class="flex items-center gap-3 text-[13px] text-bone2">
+            <span class="frame-label text-bone3">Auswahl</span>
+            <span class="text-bone3 mx-2">·</span>
+            <span class="text-bone3">Neutraler Modus</span>
+          </div>
+          <div class="flex items-center gap-2 text-[12px] text-bone3">
+            <button class="px-2 h-7 rounded hover:bg-graphite2">Teilen</button>
+            <button class="px-2 h-7 rounded hover:bg-graphite2">Export</button>
+          </div>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-bone3">Frage · 14:22</span>
+            </div>
+            <div class="text-[18px] font-display text-bone leading-snug">
+              Wie unterscheiden sich die im Bundestag vertretenen Parteien
+              bei der CO₂-Bepreisung – Höhe, Tempo, soziale Abfederung?
+            </div>
+          </div>
+
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span class="frame-label text-bone3">Antwort · Klartext</span>
+              <span class="font-mono text-[11px] text-bone3">5 Parteien · 12 Belege</span>
+            </div>
+            <article class="text-[15px] leading-[1.75] text-bone space-y-4">
+              <p>
+                Die fünf einbezogenen Parteien sind sich einig, dass eine CO₂-Bepreisung
+                Teil der Klimapolitik bleiben soll – sie unterscheiden sich vor allem in
+                <strong class="font-medium">Tempo</strong>, <strong class="font-medium">Höhe</strong>
+                und der Frage der sozialen Abfederung.
+              </p>
+              <p>
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 12</span>
+                und
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 47</span>
+                setzen auf einen festen Preispfad mit jährlichen Anhebungen; die
+                Einnahmen sollen über ein „Klimageld" pro Kopf zurückfließen.
+                <span class="cite cite-ver"><span class="dot"></span>Linke · S. 31</span>
+                fordert höhere Einstiegspreise nur für große Emittenten und eine
+                vollständige Befreiung von Haushalten mit niedrigem Einkommen.
+              </p>
+              <p>
+                Die
+                <span class="cite cite-ver"><span class="dot"></span>CDU/CSU · S. 8</span>
+                betont einen marktwirtschaftlichen Mechanismus über den
+                EU-Emissionshandel.
+                Das
+                <span class="cite cite-un"><span class="dot"></span>BSW · S. 22</span>
+                verweist auf eine „pragmatische Aussetzung" – diese Aussage ließ sich
+                gegen den Originaltext nicht eindeutig bestätigen.
+              </p>
+            </article>
+
+            <div class="mt-6 flex items-center gap-4 text-[11px] text-bone3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-verDark"></span>verifiziert · Originaltext</span>
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-bone3"></span>nicht verifiziert · prüfen</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-8 pb-6">
+          <div class="flex items-end gap-2 bg-graphite2 border border-edge rounded-lg shadow-ringD focus-within:border-ochreDark p-2">
+            <textarea
+              rows="2"
+              placeholder="Frage stellen oder vertiefen …"
+              class="flex-1 bg-transparent text-[14px] text-bone placeholder:text-bone3 resize-none px-3 py-2 ring-soft outline-none leading-relaxed"></textarea>
+            <button class="h-10 px-3 rounded-md text-bone3 hover:bg-graphite3 text-[12px] font-mono">⏎</button>
+            <button class="h-10 px-4 rounded-md bg-bone text-graphite text-[13px] font-medium flex items-center gap-2">
+              Senden
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-bone3 px-1">Enter sendet · Shift+Enter neue Zeile · Klartext kann irren – prüfe die Quellen.</p>
+        </div>
+      </main>
+
+      <aside class="border-l border-edge flex flex-col min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-bone3">Quellen</span>
+            <span class="font-mono text-[11px] text-bone3">5 / 5</span>
+          </div>
+          <button class="text-bone3 hover:text-bone" title="Einklappen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane">
+          <article class="px-5 py-4 border-b border-edge hover:bg-graphite2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-bone font-medium">Bündnis 90 / Grüne</div>
+                  <div class="text-[11px] text-bone3 font-mono">Klima &gt; CO₂-Bepreisung</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-bone3">S. 47</div>
+                <div class="font-mono text-[11px] text-verDark mt-0.5">0.93</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:93%"></div></div>
+            <p class="mt-3 text-[12.5px] text-bone2 leading-relaxed">
+              „Wir führen einen verlässlichen Preispfad für CO₂ ein und geben die
+              Einnahmen vollständig pro Kopf als Klimageld zurück."
+            </p>
+          </article>
+
+          <article class="px-5 py-4 border-b border-edge hover:bg-graphite2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-bone font-medium">SPD</div>
+                  <div class="text-[11px] text-bone3 font-mono">Klima &gt; Rückerstattung</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-bone3">S. 12 – 14</div>
+                <div class="font-mono text-[11px] text-verDark mt-0.5">0.88</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:88%"></div></div>
+            <p class="mt-3 text-[12.5px] text-bone2 leading-relaxed">
+              „Die Einnahmen aus der nationalen CO₂-Bepreisung werden über die Steuer-ID
+              an die Haushalte zurückgegeben – sozial gestaffelt."
+            </p>
+          </article>
+
+          <article class="px-5 py-4 border-b border-edge hover:bg-graphite2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-bone font-medium">CDU / CSU</div>
+                  <div class="text-[11px] text-bone3 font-mono">Wirtschaft &gt; Energie</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-bone3">S. 8 – 9</div>
+                <div class="font-mono text-[11px] text-verDark mt-0.5">0.81</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:81%"></div></div>
+            <p class="mt-3 text-[12.5px] text-bone2 leading-relaxed">
+              „Den Emissionshandel auf europäischer Ebene stärken und die Stromsteuer
+              auf das EU-Mindestmaß absenken."
+            </p>
+          </article>
+
+          <article class="px-5 py-4 border-b border-edge hover:bg-graphite2/60 cursor-pointer">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-bone font-medium">BSW</div>
+                  <div class="text-[11px] text-bone3 font-mono">Energie &gt; Versorgungssicherheit</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-bone3">S. 22</div>
+                <div class="font-mono text-[11px] text-bone3 mt-0.5">0.58</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill" style="width:58%"></div></div>
+            <p class="mt-3 text-[12.5px] text-bone2 leading-relaxed italic">
+              „Pragmatische Aussetzung in besonders kalten Monaten" – Wortlaut nicht
+              eindeutig im Originaltext.
+            </p>
+            <div class="mt-3 flex items-center gap-3 text-[11px] text-bone3 font-mono">
+              <span class="flex items-center gap-1.5"><span class="dot inline-block w-1.5 h-1.5 rounded-full bg-bone3"></span>nicht verifiziert</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="h-12 px-5 flex items-center justify-between border-t border-edge text-[11px] text-bone3">
+          <span class="font-mono">Hybrid-Retrieval · Cross-Encoder</span>
+          <button class="hover:text-bone">Alle anzeigen →</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 06 – PERSONA MODE ACTIVE
+==================================================================== -->
+<section id="s6" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">06 · Persona-Modus aktiv</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_380px] [grid-template-rows:minmax(0,1fr)] h-[860px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 overflow-y-auto pane flex-1">
+          <button class="w-full h-10 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14"/></svg>
+            Neue Unterhaltung
+          </button>
+
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Parteien</p>
+            <div class="mt-3 space-y-1.5">
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+<span>SPD</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink py-1 cursor-pointer">
+                <span class="check on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></span>
+<span>Bündnis 90 / Grüne</span>
+              </label>
+              <label class="flex items-center gap-3 text-[13px] text-ink3 py-1 cursor-pointer">
+                <span class="check"></span>
+<span>CDU / CSU</span>
+              </label>
+            </div>
+            <p class="mt-3 text-[11px] text-ink3 font-mono">2 / 7 aktiv</p>
+          </div>
+
+          <!-- persona block, highlighted -->
+          <div class="mt-8 rounded-lg border border-ochre/40 bg-ochreSoft/35 p-3 persona-stripes">
+            <div class="flex items-center justify-between">
+              <p class="frame-label text-ochre">Persona aktiv</p>
+              <button class="text-[11px] text-ink3 hover:text-ink underline underline-offset-2">Wechseln</button>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+              <div class="w-7 h-7 rounded-full bg-paper border border-rule flex items-center justify-center font-mono text-[11px] text-ink2">B</div>
+              <div class="leading-tight">
+                <div class="text-[13px] text-ink font-medium">Politiker:in B</div>
+                <div class="text-[11px] text-ink3 font-mono">Partei Y</div>
+              </div>
+            </div>
+            <p class="mt-2 text-[11px] text-ink2 leading-snug">
+              Antworten werden im Sprachstil dieser Person formuliert.
+              Fakten und Quellen bleiben unverändert.
+            </p>
+            <button class="mt-3 w-full h-8 rounded-md bg-paper border border-rule text-[12px] text-ink hover:bg-paper2">
+              Zurück zu Neutral
+            </button>
+          </div>
+
+          <div class="mt-8">
+            <p class="frame-label text-ink3">Verlauf</p>
+            <ul class="mt-3 space-y-1 text-[13px]">
+              <li class="px-2 py-1.5 rounded bg-paper2 text-ink flex items-center justify-between">
+                <span class="truncate">Rente · Stil-Modus</span>
+                <span class="font-mono text-[10px] text-ink3 ml-2">jetzt</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="px-5 h-12 flex items-center justify-between border-t border-rule text-[12px]">
+          <button class="text-ink3 hover:text-ink flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+            Filter zurücksetzen
+          </button>
+          <span class="font-mono text-ink3">⌘R</span>
+        </div>
+      </aside>
+
+      <main class="relative flex flex-col min-h-0">
+        <!-- persona banner: full row, two-line structure, calm hierarchy -->
+        <div class="px-6 py-3 hair persona-stripes flex items-center justify-between gap-6">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-ochre flex-shrink-0"></span>
+            <div class="min-w-0">
+              <div class="text-[13px] font-medium text-ink leading-tight whitespace-nowrap">
+                Stil-Imitation aktiv <span class="text-ink3">·</span> Politiker:in B
+              </div>
+              <div class="text-[11.5px] text-ink3 leading-tight mt-1 truncate">
+                Antworten im Sprachstil dieser Person · Fakten &amp; Quellen aus dem Wahlprogramm.
+              </div>
+            </div>
+          </div>
+          <button class="flex-shrink-0 h-8 px-3 rounded-md border border-rule bg-paper hover:bg-paper2 text-[12px] text-ink whitespace-nowrap">
+            Persona beenden
+          </button>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-ink3">Frage · 09:11</span>
+            </div>
+            <div class="text-[18px] font-display text-ink leading-snug">
+              Wie könnte deine Partei das Rentenniveau langfristig sichern?
+            </div>
+          </div>
+
+          <!-- persona assistant bubble — left rule + tint -->
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span class="frame-label text-ochre">Antwort · Stil-Imitation</span>
+              <span class="font-mono text-[11px] text-ink3">Politiker:in B · Partei Y</span>
+            </div>
+
+            <div class="relative pl-5 border-l-2 border-ochre">
+              <article class="text-[15px] leading-[1.75] text-ink space-y-4 font-display">
+                <p>
+                  „Schauen Sie, wir reden hier nicht über ein Detail, sondern über das
+                  Versprechen, das eine Generation der nächsten gibt. Solidität entsteht
+                  nicht durch Sonntagsreden, sondern durch klare Regeln."
+                </p>
+                <p>
+                  Wir wollen das gesetzliche Rentenniveau langfristig stabilisieren
+                  <span class="cite cite-ver"><span class="dot"></span>Partei Y · S. 18</span>
+                  und gleichzeitig die Beitragsbasis verbreitern
+                  <span class="cite cite-ver"><span class="dot"></span>Partei Y · S. 19</span>.
+                  Das heißt: alle Erwerbstätigen einbeziehen, langfristig planen, nicht
+                  jedes Jahr neu verhandeln.
+                </p>
+              </article>
+            </div>
+
+            <!-- footer warning -->
+            <div class="mt-5 flex items-start gap-3 rounded-md border border-ochre/40 bg-ochreSoft/30 px-4 py-3 persona-stripes">
+              <svg class="mt-0.5 flex-shrink-0 text-ochre" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"/></svg>
+              <div class="text-[12.5px] text-ink2 leading-relaxed">
+                <strong class="text-ink font-medium">Stil-Imitation – keine echten Zitate.</strong>
+                Formulierungen ahmen den Sprachstil von Politiker:in B nach.
+                Inhalt und Quellen stammen ausschließlich aus dem Wahlprogramm von Partei Y.
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center gap-1 text-ink3">
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">Kopieren</button>
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">Neu erzeugen</button>
+              <button class="h-8 px-2 rounded hover:bg-paper2 text-[12px] flex items-center gap-1.5">Im Neutral-Modus zeigen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-8 pb-6">
+          <div class="flex items-end gap-2 bg-white/70 border border-rule rounded-lg shadow-ring focus-within:border-ochre p-2">
+            <textarea
+              rows="2"
+              placeholder="Frage stellen — im Stil von Politiker:in B"
+              class="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink3/70 resize-none px-3 py-2 ring-soft outline-none"></textarea>
+            <button class="h-10 px-3 rounded-md text-ink3 hover:bg-paper2 text-[12px] font-mono">⏎</button>
+            <button class="h-10 px-4 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center gap-2">Senden
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-ink3 px-1">Persona aktiv · Stil-Imitation, keine echten Zitate.</p>
+        </div>
+      </main>
+
+      <aside class="border-l border-rule flex flex-col bg-paper min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-ink3">Quellen</span>
+            <span class="font-mono text-[11px] text-ink3">2 / 5</span>
+          </div>
+          <button class="text-ink3 hover:text-ink" title="Einklappen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto pane">
+          <article class="px-5 py-4 border-b border-rule">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">Partei Y</div>
+                  <div class="text-[11px] text-ink3 font-mono">Soziales &gt; Rente</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 18 – 19</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.89</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:89%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              „Rentenniveau bei mindestens 48 % halten, Beitragsbasis durch
+              Einbeziehung aller Erwerbstätigen verbreitern."
+            </p>
+          </article>
+        </div>
+        <div class="h-12 px-5 flex items-center justify-between border-t border-rule text-[11px] text-ink3">
+          <span class="font-mono">Hybrid-Retrieval · Cross-Encoder</span>
+          <button class="hover:text-ink">Alle anzeigen →</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 07 – STREAMING
+==================================================================== -->
+<section id="s7" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">07 · Streaming · Antwort fließt</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_380px] [grid-template-rows:minmax(0,1fr)] h-[800px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 flex-1 text-[13px] text-ink2">
+          <p class="frame-label text-ink3 mb-3">Aktive Anfrage</p>
+          <div class="rounded-md border border-rule bg-white/60 px-3 py-2.5">
+            <p class="text-[13px] text-ink leading-snug">
+              „Wer fordert konkret eine Reform der Schuldenbremse?"
+            </p>
+            <div class="mt-2 flex items-center gap-2 text-[11px] text-ink3 font-mono">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-ochre animate-pulse"></span>
+              <span>Retrieval &gt; Reranking &gt; Antwort</span>
+            </div>
+          </div>
+
+          <p class="frame-label text-ink3 mt-6 mb-2">Pipeline</p>
+          <ol class="space-y-2 text-[12px] font-mono">
+            <li class="flex items-center justify-between">
+              <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-ver"></span>Hybrid Retrieval</span>
+              <span class="text-ink3">0.4 s</span>
+            </li>
+            <li class="flex items-center justify-between">
+              <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-ver"></span>Cross-Encoder Rerank</span>
+              <span class="text-ink3">0.8 s</span>
+            </li>
+            <li class="flex items-center justify-between">
+              <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-ochre animate-pulse"></span>Antwort streamen</span>
+              <span class="text-ink3">…</span>
+            </li>
+            <li class="flex items-center justify-between text-ink3">
+              <span class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-rule"></span>Citation-Verifikation</span>
+              <span>—</span>
+            </li>
+          </ol>
+        </div>
+      </aside>
+
+      <main class="relative flex flex-col min-h-0">
+        <div class="h-14 px-6 flex items-center justify-between hair">
+          <div class="flex items-center gap-3 text-[13px] text-ink2">
+            <span class="frame-label text-ink3">Antwort wird erzeugt</span>
+            <div class="flex items-center gap-1.5 text-[12px] text-ink2 font-mono">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-ochre animate-pulse"></span>
+              streaming · 4 / 5 Quellen genutzt
+            </div>
+          </div>
+          <button class="h-8 px-3 rounded-md bg-rust/10 text-rust border border-rust/30 hover:bg-rust/15 text-[12px] font-medium flex items-center gap-2">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            Stop
+          </button>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-ink3">Frage · jetzt</span>
+            </div>
+            <div class="text-[18px] font-display text-ink leading-snug">
+              Wer fordert konkret eine Reform der Schuldenbremse – und mit welcher
+              Begründung?
+            </div>
+          </div>
+
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-3">
+              <span class="frame-label text-ink3">Antwort · Klartext</span>
+            </div>
+            <article class="text-[15px] leading-[1.75] text-ink space-y-4">
+              <p>
+                Drei der einbezogenen Parteien fordern eine Reform der Schuldenbremse,
+                aus jeweils unterschiedlichen Gründen.
+              </p>
+              <p>
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 21</span>
+                argumentiert mit „Investitionen in Infrastruktur und Bildung", die unter
+                der bestehenden Regel kaum finanzierbar seien.
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 54</span>
+                schlägt eine Ausnahme für klimabezogene Investitionen vor und
+                koppelt diese an einen festen Tilgungsplan.
+              </p>
+              <p>
+                <span class="cite cite-ver"><span class="dot"></span>Linke · S. 36</span>
+                lehnt die Schuldenbremse grundsätzlich ab und fordert eine vollständige
+                Streichung aus dem Grundgesetz, um<span class="caret"></span>
+              </p>
+            </article>
+
+            <div class="mt-5 text-[11px] text-ink3 font-mono flex items-center gap-3">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-ochre animate-pulse"></span>
+              <span>1 312 Token · 22 Token/s · Citation-Verifikation steht aus</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-8 pb-6">
+          <div class="flex items-end gap-2 bg-white/70 border border-rule rounded-lg shadow-ring p-2 opacity-60 pointer-events-none">
+            <textarea rows="1" placeholder="Eingabe gesperrt, während die Antwort läuft …"
+              class="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink3/70 resize-none px-3 py-2 outline-none"></textarea>
+            <button class="h-10 px-4 rounded-md bg-ink/40 text-paper text-[13px] font-medium">Senden</button>
+          </div>
+          <p class="mt-2 text-[11px] text-ink3 px-1">Stop drücken, um Erzeugung abzubrechen.</p>
+        </div>
+      </main>
+
+      <aside class="border-l border-rule flex flex-col bg-paper min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-ink3">Quellen</span>
+            <span class="font-mono text-[11px] text-ink3">5 / 5</span>
+          </div>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto pane">
+          <article class="px-5 py-4 border-b border-rule bg-ochreSoft/25">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">SPD</div>
+                  <div class="text-[11px] text-ink3 font-mono">Finanzen &gt; Schuldenregel</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 21</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.91</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:91%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">„Reform der Schuldenbremse zugunsten von Zukunftsinvestitionen."</p>
+            <p class="mt-2 text-[11px] text-ochre font-mono">→ wird gerade zitiert</p>
+          </article>
+
+          <article class="px-5 py-4 border-b border-rule">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">Grüne</div>
+                  <div class="text-[11px] text-ink3 font-mono">Finanzen &gt; Investitionen</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 54</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.86</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:86%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">„Ausnahme für klimabezogene Investitionen mit Tilgungsplan."</p>
+          </article>
+
+          <article class="px-5 py-4 border-b border-rule">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="leading-tight">
+                  <div class="text-[13px] text-ink font-medium">Die Linke</div>
+                  <div class="text-[11px] text-ink3 font-mono">Finanzen &gt; Schuldenbremse</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-mono text-[11px] text-ink3">S. 36</div>
+                <div class="font-mono text-[11px] text-ver mt-0.5">0.79</div>
+              </div>
+            </div>
+            <div class="score-bar mt-2"><div class="score-fill ver" style="width:79%"></div></div>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">„Vollständige Streichung aus dem Grundgesetz."</p>
+          </article>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 08 – ERROR (keine relevanten Stellen)
+==================================================================== -->
+<section id="s8" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">08 · Fehler · Keine relevanten Stellen</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_380px] [grid-template-rows:minmax(0,1fr)] h-[720px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 text-[13px] text-ink2 flex-1">
+          <p class="frame-label text-ink3 mb-3">Aktive Auswahl</p>
+          <p class="text-[13px] text-ink leading-snug">CDU · SPD · Grüne · FDP</p>
+          <p class="mt-2 text-[11px] text-ink3 font-mono">4 / 7 aktiv</p>
+        </div>
+      </aside>
+
+      <main class="relative flex flex-col min-h-0">
+        <div class="h-14 px-6 flex items-center hair text-[13px] text-ink2">
+          <span class="frame-label text-ink3">Antwort · Klartext</span>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+          <div class="max-w-[720px] mx-auto">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="frame-label text-ink3">Frage · 11:04</span>
+            </div>
+            <div class="text-[18px] font-display text-ink leading-snug">
+              Was sagen die Parteien zur Frage, ob Pluto wieder als Planet
+              anerkannt werden soll?
+            </div>
+          </div>
+
+          <div class="max-w-[720px] mx-auto">
+            <!-- muted answer card, less prominent than success -->
+            <div class="rounded-lg border border-dashed border-rule2 bg-paper2/60 px-6 py-5">
+              <div class="flex items-start gap-4">
+                <div class="mt-0.5 w-9 h-9 rounded-md border border-rule bg-paper flex items-center justify-center text-ink3">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <div>
+                  <p class="frame-label text-ink3 mb-1">Keine Treffer</p>
+                  <h3 class="font-display text-[20px] text-ink leading-snug">
+                    Dazu habe ich in den ausgewählten Wahlprogrammen nichts gefunden.
+                  </h3>
+                  <p class="mt-3 text-[14px] text-ink2 leading-relaxed">
+                    Die höchste Relevanz lag bei <span class="font-mono">0.31</span>,
+                    deutlich unterhalb der Schwelle für eine belastbare Antwort.
+                    Klartext erfindet in diesem Fall nichts.
+                  </p>
+                  <ul class="mt-4 space-y-2 text-[13px] text-ink2">
+                    <li class="flex items-start gap-2">
+                      <span class="mt-1.5 w-1 h-1 rounded-full bg-ink3"></span>
+                      Frage neu formulieren – konkreter oder politischer.
+                    </li>
+                    <li class="flex items-start gap-2">
+                      <span class="mt-1.5 w-1 h-1 rounded-full bg-ink3"></span>
+                      Mehr Parteien einbeziehen (aktuell 4 / 7 aktiv).
+                    </li>
+                    <li class="flex items-start gap-2">
+                      <span class="mt-1.5 w-1 h-1 rounded-full bg-ink3"></span>
+                      Verwandtes Thema versuchen, z. B. „Forschung &amp; Wissenschaft".
+                    </li>
+                  </ul>
+                  <div class="mt-5 flex items-center gap-2">
+                    <button class="h-9 px-3 rounded-md border border-rule bg-paper hover:bg-paper2 text-[13px] text-ink">Frage umformulieren</button>
+                    <button class="h-9 px-3 rounded-md border border-rule bg-paper hover:bg-paper2 text-[13px] text-ink">Alle Parteien einbeziehen</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-8 pb-6">
+          <div class="flex items-end gap-2 bg-white/70 border border-rule rounded-lg shadow-ring focus-within:border-ochre p-2">
+            <textarea rows="1" placeholder="Frage präziser stellen …"
+              class="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink3/70 resize-none px-3 py-2 ring-soft outline-none"></textarea>
+            <button class="h-10 px-4 rounded-md bg-ink text-paper text-[13px] font-medium flex items-center gap-2">Senden
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <aside class="border-l border-rule flex flex-col bg-paper min-h-0">
+        <div class="h-14 px-5 flex items-center justify-between hair">
+          <div class="flex items-center gap-2">
+            <span class="frame-label text-ink3">Quellen</span>
+            <span class="font-mono text-[11px] text-ink3">0 / 5</span>
+          </div>
+        </div>
+        <div class="flex-1 min-h-0 flex items-center justify-center px-6 text-center">
+          <div>
+            <div class="mx-auto w-12 h-12 rounded-full border border-rule flex items-center justify-center text-ink3">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+            </div>
+            <p class="mt-4 text-[13px] text-ink2 leading-relaxed max-w-[240px] mx-auto">
+              Keine Stellen oberhalb der Relevanzschwelle gefunden.
+              Frage anpassen oder Filter erweitern.
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 09 – SOURCES COLLAPSED
+==================================================================== -->
+<section id="s9" class="frame-wrap pt-0">
+  <div class="max-w-[1440px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">09 · Quellen-Panel eingeklappt</p>
+
+    <div class="grid grid-cols-[300px_minmax(0,1fr)_56px] [grid-template-rows:minmax(0,1fr)] h-[720px] rounded-xl overflow-hidden border border-rule bg-paper">
+
+      <aside class="border-r border-rule flex flex-col min-h-0">
+        <div class="px-5 h-14 flex items-center hair">
+          <span class="wordmark text-[22px] text-ink leading-none">Klartext</span>
+        </div>
+        <div class="px-5 py-5 text-[13px] text-ink2 flex-1">
+          <p class="frame-label text-ink3 mb-3">Aktive Auswahl</p>
+          <p class="text-[13px] text-ink leading-snug">CDU · SPD · Grüne · Linke · BSW</p>
+          <p class="mt-2 text-[11px] text-ink3 font-mono">5 / 7 aktiv</p>
+
+          <p class="frame-label text-ink3 mt-6 mb-2">Persona</p>
+          <p class="text-[13px] text-ink">Neutraler Modus</p>
+        </div>
+      </aside>
+
+      <main class="relative flex flex-col min-h-0">
+        <div class="h-14 px-6 flex items-center justify-between hair text-[13px] text-ink2">
+          <span class="frame-label text-ink3">CO₂-Bepreisung 2026</span>
+          <span class="text-ink3 text-[12px]">Quellen-Panel eingeklappt – mehr Lesefläche</span>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto pane px-8 py-8 space-y-8">
+          <div class="max-w-[820px] mx-auto">
+            <article class="text-[15.5px] leading-[1.8] text-ink space-y-4">
+              <p>
+                Die fünf einbezogenen Parteien sind sich einig, dass eine CO₂-Bepreisung
+                Teil der Klimapolitik bleiben soll – sie unterscheiden sich vor allem
+                in Tempo, Höhe und der Frage der sozialen Abfederung.
+              </p>
+              <p>
+                <span class="cite cite-ver"><span class="dot"></span>SPD · S. 12</span>
+                und
+                <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 47</span>
+                setzen auf einen festen Preispfad mit jährlichen Anhebungen;
+                die Einnahmen sollen über ein „Klimageld" pro Kopf zurückfließen.
+                <span class="cite cite-ver"><span class="dot"></span>Linke · S. 31</span>
+                fordert höhere Einstiegspreise nur für große Emittenten.
+              </p>
+              <p>
+                Die
+                <span class="cite cite-ver"><span class="dot"></span>CDU/CSU · S. 8</span>
+                betont einen marktwirtschaftlichen Mechanismus über den
+                EU-Emissionshandel. Das
+                <span class="cite cite-un"><span class="dot"></span>BSW · S. 22</span>
+                verweist auf eine „pragmatische Aussetzung" – nicht eindeutig im
+                Originaltext bestätigt.
+              </p>
+            </article>
+          </div>
+        </div>
+      </main>
+
+      <!-- collapsed sources rail -->
+      <aside class="border-l border-rule bg-paper2/40 flex flex-col items-center pt-4 gap-3">
+        <button class="w-9 h-9 rounded-md hover:bg-paper3 flex items-center justify-center text-ink" title="Quellen ausklappen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <span class="frame-label text-ink3 [writing-mode:vertical-rl] mt-2">Quellen · 5</span>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================
+     STATE 10 – MOBILE  (empty + active, light + one dark detail)
+==================================================================== -->
+<section id="s10" class="frame-wrap pt-0">
+  <div class="max-w-[1280px] mx-auto">
+    <p class="frame-label text-ink3 dark:text-bone3 mb-3">10 · Mobil · Smartphone-Breite</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 place-items-center">
+
+      <!-- mobile 1: start / empty -->
+      <div class="device h-[760px] relative">
+        <div class="device-notch"></div>
+        <div class="h-full flex flex-col text-ink">
+          <div class="pt-12 px-5 flex items-center justify-between text-[11px] font-mono text-ink3">
+            <span>9:41</span>
+            <span>•••</span>
+          </div>
+          <div class="flex-1 min-h-0 flex flex-col items-center justify-center px-6 text-center">
+            <p class="frame-label text-ink3 mb-4 tracking-[0.3em]">— KLARTEXT —</p>
+            <h2 class="wordmark text-[40px] leading-[1.0] text-ink press">
+              Was möchtest du wissen<span class="text-ochre">?</span>
+            </h2>
+            <p class="mt-3 text-[12.5px] text-ink2 leading-relaxed">
+              Antworten aus den Wahlprogrammen.
+              Mit Seitenzahl. Lokal.
+            </p>
+            <div class="mt-7 w-full">
+              <div class="flex items-center bg-white/80 border border-rule rounded-md shadow-ring">
+                <input type="text" placeholder="Frage stellen …"
+                  class="flex-1 h-11 bg-transparent px-3 text-[13px] text-ink placeholder:text-ink3/70 outline-none"/>
+                <button class="m-1.5 h-8 px-3 rounded-md bg-ink text-paper text-[12px] font-medium">Fragen</button>
+              </div>
+              <div class="mt-4 space-y-1.5 text-left">
+                <button class="w-full text-left px-3 py-2 rounded-md border border-rule hover:bg-paper2 text-[12.5px] text-ink2">
+                  Pläne für den Wohnungsmarkt?
+                </button>
+                <button class="w-full text-left px-3 py-2 rounded-md border border-rule hover:bg-paper2 text-[12.5px] text-ink2">
+                  Wer will die Schuldenbremse reformieren?
+                </button>
+                <button class="w-full text-left px-3 py-2 rounded-md border border-rule hover:bg-paper2 text-[12.5px] text-ink2">
+                  Position zur Wehrpflicht?
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="px-5 h-10 flex items-center justify-between hair text-[10px] text-ink3 font-mono">
+            <span>7 Programme</span>
+            <span>v 0.4</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile 2: chat active -->
+      <div class="device h-[760px] relative">
+        <div class="device-notch"></div>
+        <div class="h-full flex flex-col text-ink">
+          <div class="pt-11 pb-3 px-5 hair flex items-center justify-between">
+            <button class="w-8 h-8 rounded-md hover:bg-paper2 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            </button>
+            <span class="wordmark text-[18px] text-ink">Klartext</span>
+            <button class="w-8 h-8 rounded-md hover:bg-paper2 flex items-center justify-center text-ink2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+            </button>
+          </div>
+
+          <!-- party chips row (filters condensed) -->
+          <div class="px-5 py-2 flex items-center justify-between hair">
+            <span class="text-[10px] font-mono text-ink3 tracking-[0.06em]">PARTEIEN · 5 / 7</span>
+            <span class="text-[11px] text-ink2">CDU · SPD · Grüne · Linke · BSW</span>
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-y-auto pane px-5 py-4 space-y-5">
+            <!-- user -->
+            <div>
+              <span class="frame-label text-ink3">Frage</span>
+              <p class="mt-1 text-[15px] font-display text-ink leading-snug">
+                Wie unterscheiden sich die Parteien bei der CO₂-Bepreisung?
+              </p>
+            </div>
+            <!-- assistant -->
+            <div>
+              <span class="frame-label text-ink3">Antwort</span>
+              <article class="mt-1 text-[13.5px] leading-[1.65] text-ink space-y-2.5">
+                <p>
+                  Alle einbezogenen Parteien wollen eine CO₂-Bepreisung beibehalten,
+                  unterscheiden sich aber in Höhe und Rückerstattung.
+                </p>
+                <p>
+                  <span class="cite cite-ver"><span class="dot"></span>SPD · S. 12</span>
+                  und
+                  <span class="cite cite-ver"><span class="dot"></span>Grüne · S. 47</span>
+                  setzen auf einen Preispfad mit Klimageld. Die
+                  <span class="cite cite-ver"><span class="dot"></span>CDU · S. 8</span>
+                  setzt auf den EU-Emissionshandel.
+                  Das
+                  <span class="cite cite-un"><span class="dot"></span>BSW · S. 22</span>
+                  ist nicht verifiziert.
+                </p>
+              </article>
+            </div>
+            <!-- collapsed sources accordion -->
+            <div class="border border-rule rounded-md">
+              <button class="w-full px-3 h-9 flex items-center justify-between text-[12px] text-ink">
+                <span class="frame-label text-ink3">Quellen · 5</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="px-3 pb-3">
+            <div class="flex items-center gap-2 bg-white/80 border border-rule rounded-md shadow-ring focus-within:border-ochre p-1.5">
+              <textarea rows="1" placeholder="Vertiefen …"
+                class="flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink3/70 resize-none px-2 py-1.5 outline-none"></textarea>
+              <button class="h-8 w-8 rounded-md bg-ink text-paper flex items-center justify-center">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile 3: dark active -->
+      <div class="dark device h-[760px] relative">
+        <div class="device-notch"></div>
+        <div class="h-full flex flex-col text-bone">
+          <div class="pt-11 pb-3 px-5 hair flex items-center justify-between">
+            <button class="w-8 h-8 rounded-md hover:bg-graphite2 flex items-center justify-center text-bone2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            </button>
+            <span class="wordmark text-[18px] text-bone">Klartext</span>
+            <button class="w-8 h-8 rounded-md hover:bg-graphite2 flex items-center justify-center text-bone2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+            </button>
+          </div>
+
+          <div class="px-5 py-2 flex items-center gap-1.5 overflow-x-auto hair">
+            <span class="text-[10px] font-mono text-bone3 mr-1">PERSONA</span>
+            <span class="inline-flex items-center gap-1.5 px-2 h-6 rounded bg-ochreSoft/15 border border-ochre/30 text-[11px] text-ochreDark">
+              <span class="w-1.5 h-1.5 rounded-full bg-ochreDark"></span>
+              Politiker:in B
+            </span>
+            <span class="text-[10px] font-mono text-bone3">aktiv</span>
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-y-auto pane px-5 py-4 space-y-5">
+            <div>
+              <span class="frame-label text-bone3">Frage</span>
+              <p class="mt-1 text-[15px] font-display text-bone leading-snug">
+                Wie sichern wir das Rentenniveau langfristig?
+              </p>
+            </div>
+            <div>
+              <span class="frame-label text-ochreDark">Antwort · Stil-Imitation</span>
+              <div class="mt-1 pl-3 border-l-2 border-ochreDark">
+                <article class="text-[13.5px] leading-[1.65] text-bone space-y-2 font-display">
+                  <p>
+                    „Reden wir Klartext: das Rentenversprechen halten wir nur,
+                    wenn alle Erwerbstätigen einzahlen."
+                  </p>
+                  <p>
+                    Stabilisierung des Niveaus
+                    <span class="cite cite-ver"><span class="dot"></span>Partei Y · S. 18</span>,
+                    Verbreiterung der Beitragsbasis
+                    <span class="cite cite-ver"><span class="dot"></span>Partei Y · S. 19</span>.
+                  </p>
+                </article>
+              </div>
+              <p class="mt-2 text-[11px] text-bone3 leading-snug">
+                <span class="text-ochreDark">Stil-Imitation</span> – keine echten Zitate.
+              </p>
+            </div>
+          </div>
+
+          <div class="px-3 pb-3">
+            <div class="flex items-center gap-2 bg-graphite2 border border-edge rounded-md shadow-ringD focus-within:border-ochreDark p-1.5">
+              <textarea rows="1" placeholder="Vertiefen …"
+                class="flex-1 bg-transparent text-[13px] text-bone placeholder:text-bone3 resize-none px-2 py-1.5 outline-none"></textarea>
+              <button class="h-8 w-8 rounded-md bg-bone text-graphite flex items-center justify-center">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Spacer at bottom -->
+<div class="h-24"></div>
+
+<!-- ====================================================================
+     SCRIPTS — theme toggle, smooth nav, tiny streaming caret
+==================================================================== -->
+<script>
+  // Theme toggle — toggles 'dark' on <html>. The .dark frame wrappers
+  // around individual mockups remain dark regardless (they're scoped).
+  const root = document.documentElement;
+  const btn  = document.getElementById('themeToggle');
+  function setTheme(t) {
+    if (t === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+    try { localStorage.setItem('klartext-theme', t); } catch(e) {}
+  }
+  // initial
+  try {
+    const saved = localStorage.getItem('klartext-theme');
+    if (saved) setTheme(saved);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+  } catch(e) {}
+  btn.addEventListener('click', () => {
+    setTheme(root.classList.contains('dark') ? 'light' : 'dark');
+  });
+
+  // Smooth scroll for state nav
+  document.querySelectorAll('.state-nav a').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href');
+      if (!id || !id.startsWith('#')) return;
+      const target = document.querySelector(id);
+      if (target) {
+        e.preventDefault();
+        const top = target.getBoundingClientRect().top + window.scrollY - 12;
+        window.scrollTo({ top, behavior:'smooth' });
+      }
+    });
+  });
+</script>
+</body>
+</html>
