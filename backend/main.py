@@ -214,7 +214,8 @@ def build_production_services(settings: Settings) -> Services:
     from pathlib import Path as _Path
 
     import ollama as ollama_lib
-    from FlagEmbedding import BGEM3FlagModel, FlagReranker
+    from FlagEmbedding import BGEM3FlagModel
+    from sentence_transformers import CrossEncoder
 
     import chromadb
     from backend.bm25_index import Bm25Index
@@ -247,12 +248,21 @@ def build_production_services(settings: Settings) -> Services:
             )
             return out["dense_vecs"].tolist()
 
-    reranker_model = FlagReranker(settings.reranker_model, use_fp16=False)
+    # CrossEncoder uses the fast tokenizer path; FlagReranker still calls
+    # the removed slow-tokenizer ``prepare_for_model`` on transformers 5.x.
+    reranker_model = CrossEncoder(settings.reranker_model, max_length=512)
 
     class _Scorer:
         def score(self, pairs):
-            scores = reranker_model.compute_score(list(pairs), normalize=True)
-            return list(scores) if isinstance(scores, list) else [scores]
+            scores = reranker_model.predict(
+                [(q, t) for q, t in pairs],
+                activation_fn=None,
+                convert_to_numpy=True,
+            )
+            import numpy as _np
+
+            # Map raw logits to [0, 1] via sigmoid so the threshold (0.3) keeps meaning.
+            return (1.0 / (1.0 + _np.exp(-scores))).tolist()
 
     retriever = HybridRetriever(collection=manifestos, bm25=bm25, embedder=_Embedder())
     reranker = CrossEncoderReranker(scorer=_Scorer(), threshold=settings.rerank_score_threshold)
