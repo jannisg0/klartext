@@ -19,6 +19,7 @@ import structlog
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+from starlette.concurrency import run_in_threadpool
 
 from backend.citation_verifier import verify_citations
 from backend.config import Settings, get_settings
@@ -91,20 +92,31 @@ def _citations_payload(verification) -> dict[str, Any]:
 
 async def _stream_chat(req: ChatRequest, services: Services) -> AsyncIterator[dict[str, Any]]:
     settings = services.settings
-    queries = expand_query(
+
+    # Each model call is sync (ollama, BGE-M3, sentence-transformers). Run it on
+    # a threadpool so other ASGI requests (notably /health) can still progress
+    # and so the SSE response can flush each yield without head-of-line blocking.
+    queries = await run_in_threadpool(
+        expand_query,
         req.query,
         llm=services.helper_llm,
         enabled=settings.query_expansion_enabled,
     )
 
-    raw_hits = services.retriever.retrieve(
+    raw_hits = await run_in_threadpool(
+        services.retriever.retrieve,
         queries,
         top_k=max(settings.retrieval_top_k_dense, settings.retrieval_top_k_sparse),
         dense_top_k=settings.retrieval_top_k_dense,
         sparse_top_k=settings.retrieval_top_k_sparse,
         party_filter=req.party_filter,
     )
-    reranked = services.reranker.rerank(query=req.query, hits=raw_hits, top_k=settings.rerank_top_k)
+    reranked = await run_in_threadpool(
+        services.reranker.rerank,
+        query=req.query,
+        hits=raw_hits,
+        top_k=settings.rerank_top_k,
+    )
 
     yield {"event": "sources", "data": json.dumps(_sources_payload(reranked.hits))}
 
@@ -138,7 +150,22 @@ async def _stream_chat(req: ChatRequest, services: Services) -> AsyncIterator[di
         )
 
     parts: list[str] = []
-    for token in services.main_llm.chat_stream(messages):
+    token_iter = services.main_llm.chat_stream(messages)
+
+    # iterate the sync ollama stream one token at a time on a threadpool so the
+    # event loop can yield each SSE frame as it arrives.
+    sentinel = object()
+
+    def _next_token():
+        try:
+            return next(token_iter)
+        except StopIteration:
+            return sentinel
+
+    while True:
+        token = await run_in_threadpool(_next_token)
+        if token is sentinel:
+            break
         parts.append(token)
         yield {"event": "token", "data": json.dumps({"text": token})}
 
