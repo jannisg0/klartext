@@ -94,6 +94,7 @@ class OllamaClient(Protocol):
         messages: list[dict[str, str]],
         stream: bool,
         options: dict | None = None,
+        think: bool = False,
     ) -> Iterator[dict[str, Any]]: ...
 
     def generate(
@@ -103,6 +104,7 @@ class OllamaClient(Protocol):
         prompt: str,
         stream: bool,
         options: dict | None = None,
+        think: bool = False,
     ) -> dict[str, Any]: ...
 
 
@@ -119,11 +121,15 @@ class OllamaLLM:
 
     def chat_stream(self, messages: Sequence[Message]) -> Iterator[str]:
         payload = [{"role": m.role, "content": m.content} for m in messages]
+        # think=False disables chain-of-thought for thinking-capable models
+        # (e.g. gemma4:e4b-mlx, qwen3) so first-token latency stays low.
+        # For non-thinking models Ollama silently ignores the flag.
         stream = self.client.chat(
             model=self.config.model,
             messages=payload,
             stream=True,
             options=self._options(),
+            think=False,
         )
         for chunk in stream:
             token = chunk.get("message", {}).get("content", "")
@@ -138,5 +144,6 @@ class OllamaLLM:
             prompt=prompt,
             stream=False,
             options=self._options(),
+            think=False,
         )
         return response.get("response", "")
