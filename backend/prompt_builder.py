@@ -38,20 +38,9 @@ _NEUTRAL_SYSTEM = (
     "gleichwertig nebeneinander.\n"
     "- Vermeide Wertungen wie 'gut', 'schlecht', 'sinnvoll'.\n"
     "\n"
-    "BEISPIELE für korrektes Format:\n"
-    "\n"
-    "Frage: Wie steht die SPD zum Mindestlohn?\n"
-    "Antwort: Die SPD fordert einen Mindestlohn von 15 Euro pro Stunde "
-    "[SPD – Seite 2]. Sie will außerdem den Mindestlohn an die Lohnentwicklung "
-    "koppeln [SPD – Seite 3].\n"
-    "\n"
-    "Frage: Was sagen die Parteien zur Vermögensteuer?\n"
-    "Antwort: Die SPD will die Vermögensteuer wieder einführen "
-    "[SPD – Seite 12]. Die CDU lehnt eine Vermögensteuer ab und setzt "
-    "stattdessen auf Steuersenkungen für die Mittelschicht [CDU – Seite 5].\n"
-    "\n"
-    "Antworte jetzt auf die Frage des Nutzers im SELBEN Format. JEDER Satz "
-    "muss mit [PARTEI – Seite X] enden, sonst ist die Antwort ungültig.\n"
+    "ERLAUBTE QUELLENANGABEN (verwende AUSSCHLIESSLICH diese, keine anderen "
+    "Seitenzahlen):\n"
+    "{citation_whitelist}\n"
     "\n"
     "Kontext:\n{chunks}"
 )
@@ -74,6 +63,29 @@ def format_chunks_with_citations(hits: Sequence[Hit]) -> str:
     return "\n\n".join(blocks)
 
 
+def build_citation_whitelist(hits: Sequence[Hit]) -> str:
+    """List of (party, page) tuples actually present in the retrieval set.
+
+    Smaller LLMs leak page numbers from few-shot examples into the
+    answer; pinning an explicit whitelist of valid citations in the
+    system prompt prevents the leak without removing the examples that
+    teach the format.
+    """
+    if not hits:
+        return "(keine Quellen verfügbar)"
+    seen: set[tuple[str, str]] = set()
+    items: list[str] = []
+    for hit in hits:
+        party = str(hit.metadata.get("party", "?")).upper()
+        page = str(hit.metadata.get("page", "?"))
+        key = (party, page)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(f"[{party} – Seite {page}]")
+    return ", ".join(items)
+
+
 def _truncate_history(history: Sequence[Message]) -> list[Message]:
     return list(history[-MAX_HISTORY:])
 
@@ -81,7 +93,10 @@ def _truncate_history(history: Sequence[Message]) -> list[Message]:
 def _system_message_neutral(hits: Sequence[Hit]) -> Message:
     return Message(
         role="system",
-        content=_NEUTRAL_SYSTEM.format(chunks=format_chunks_with_citations(hits)),
+        content=_NEUTRAL_SYSTEM.format(
+            chunks=format_chunks_with_citations(hits),
+            citation_whitelist=build_citation_whitelist(hits),
+        ),
     )
 
 
