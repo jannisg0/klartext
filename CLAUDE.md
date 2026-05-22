@@ -14,10 +14,16 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
 
 - **Package Manager**: uv (pyproject.toml + uv.lock)
 - **Python**: >=3.11
-- **LLM Hauptmodell**: Ollama qwen3:14b (16GB Mac) oder qwen3.6:27b (32GB)
-- **LLM Hilfsmodell**: Ollama qwen3:4b (Contextual Enrichment + Query Expansion)
-- **Embeddings**: BAAI/bge-m3 (dense + sparse aus einem Modell)
-- **Reranker**: BAAI/bge-reranker-v2-m3 (Cross-Encoder)
+- **LLM (MLX, default)**: `mlx-community/gemma-4-e4b-it-OptiQ-4bit` —
+  bedient sowohl Answer-Generation als auch Helper-Rolle (Contextual
+  Enrichment + Query Expansion). Ein Gewichtssatz im Unified-Memory.
+- **LLM (Ollama, Escape Hatch)**: `LLM_BACKEND=ollama` reaktiviert die
+  Legacy-Pipeline (`qwen3:14b` / `qwen3:4b`) — nur für goldset-Vergleiche
+  in Session G; wird danach entfernt.
+- **Embeddings**: BAAI/bge-m3 via FlagEmbedding (dense + sparse aus einem Modell)
+- **Reranker**: `mlx-community/bge-reranker-v2-m3-4bit` (MLX); Fallback
+  auf `BAAI/bge-reranker-v2-m3` via sentence-transformers, wenn der
+  MLX-Quant nicht verfügbar ist.
 - **Vector DB**: ChromaDB (lokal, persistiert)
 - **Sparse Index**: rank_bm25 (in-memory, persistiert als pickle)
 - **PDF-Parsing**: PyMuPDF (layout-aware mit Heading-Detection)
@@ -42,7 +48,8 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
    - NIE über Sektionsgrenzen chunken
    - `section_path` als Metadatum: `"Wirtschaft > Steuerpolitik > Vermögensteuer"`
 5. **Contextual Enrichment** (Anthropic-Methode):
-   - Pro Chunk Call an `qwen3:4b`:
+   - Pro Chunk Call an das Helper-LLM (MLX Gemma 4 E4B, oder Ollama
+     `qwen3:4b` im Escape-Hatch):
      ```
      Document-Kontext: {section_path}
      Chunk: {chunk}
@@ -50,7 +57,10 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
      Nur den Satz, sonst nichts.
      ```
    - Generierten Satz vor den Chunk kleben.
-   - Caching: SHA256 von Chunk-Inhalt als Key, damit Re-Ingests schnell sind.
+   - Caching: SHA256 von `(section_path, text)` als Key — rein
+     content-basiert. Ein Modellwechsel invalidiert den Cache **nicht**;
+     bestehende Enrichments bleiben, neue Chunks bekommen die Sätze vom
+     aktuell aktiven Helper-Modell.
 6. **Embedding mit BGE-M3**:
    - dense vector → ChromaDB Collection `klartext_manifestos`
    - sparse weights → BM25 Index (Term-Frequencies)
@@ -60,7 +70,7 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
 ### Runtime (pro User-Query)
 
 1. Query empfangen + Filter (`party_filter`, `politician`).
-2. **Query Expansion** via `qwen3:4b` (toggelbar):
+2. **Query Expansion** via Helper-LLM (toggelbar):
    ```
    Generiere 2 alternative deutsche Formulierungen dieser Frage.
    ```
@@ -74,7 +84,7 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
    - Top 5 keepen
    - Score < threshold (default `0.3`) → leeres Ergebnis signalisieren
 6. **Prompt-Konstruktion** (siehe System-Prompts unten).
-7. **LLM-Generation** mit `qwen3:14b/27b`, streaming.
+7. **LLM-Generation** mit MLX Gemma 4 E4B (`mlx_lm.stream_generate`), streaming.
 8. **Citation Verification post-hoc**:
    - Regex `\[(\w+) – Seite (\d+)\]` aus Antwort extrahieren
    - Jede gegen retrieved chunks prüfen
@@ -210,21 +220,23 @@ klartext/
 
 ## Setup-Reihenfolge
 
-1. `brew install uv ollama git`
+1. `brew install uv git` (Apple Silicon Mac vorausgesetzt)
 2. `git clone <repo> klartext && cd klartext` (oder neu initialisiert)
-3. `ollama serve` (oder als Service)
-4. `ollama pull qwen3:14b` (16GB Mac)
-5. `ollama pull qwen3:4b` (Hilfsmodell)
-6. `uv sync`
-7. `uv run pre-commit install`
-8. `cp .env.example .env` und ggf. anpassen
-9. Wahlprogramm-PDFs in `data/manifestos/` ablegen (`spd.pdf`, `cdu.pdf`, ...)
-10. Tweet-JSONs in `data/tweets/` ablegen
-11. `data/eval/goldset.json` mit Q&A-Paaren befüllen (~30-50)
-12. `uv run python scripts/ingest.py`
-13. `uv run python scripts/eval.py` (Baseline messen)
-14. `uv run uvicorn backend.main:app --reload --port 8000`
-15. `cd frontend && npm install && npm run dev`
+3. `uv sync` (zieht `mlx-lm`, `FlagEmbedding` etc.)
+4. `uv run pre-commit install`
+5. `cp .env.example .env` und ggf. anpassen
+6. Wahlprogramm-PDFs in `data/manifestos/` ablegen (`spd.pdf`, `cdu.pdf`, ...)
+7. Tweet-JSONs in `data/tweets/` ablegen
+8. `data/eval/goldset.json` mit Q&A-Paaren befüllen (~30-50)
+9. `uv run python scripts/ingest.py` (erster Lauf zieht das MLX-Modell
+   von HuggingFace, ~5 GB; danach im HF-Cache)
+10. `uv run python scripts/eval.py` (Baseline messen)
+11. `uv run uvicorn backend.main:app --reload --port 8000`
+12. `cd frontend && npm install && npm run dev`
+
+Escape-Hatch: `LLM_BACKEND=ollama` setzen, `ollama serve` starten und
+`ollama pull qwen3:14b qwen3:4b` — reaktiviert die Legacy-Pipeline für
+goldset-Vergleiche.
 
 ---
 

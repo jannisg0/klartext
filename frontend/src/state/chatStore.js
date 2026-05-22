@@ -4,7 +4,7 @@ import { createContext, useContext } from 'react'
 //   'idle'         - no run in flight, EmptyState if history is empty
 //   'streaming'    - request running; sources may have arrived, tokens flowing
 //   'done'         - run finished; below-threshold = done && tokens.length === 0
-//   'error'        - request failed (network, backend, ollama)
+//   'error'        - request failed (network, backend, LLM)
 export const initialState = {
   status: 'idle',
   query: '',

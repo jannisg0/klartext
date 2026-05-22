@@ -8,6 +8,7 @@ avoid surprises (e.g. CORS, log level).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    llm_backend: Literal["mlx", "ollama"] = "mlx"
+    mlx_model_llm: str = "mlx-community/gemma-4-e4b-it-OptiQ-4bit"
+    mlx_model_reranker: str = "mlx-community/bge-reranker-v2-m3-4bit"
+    mlx_max_tokens: int = 1024
     ollama_host: str = "http://localhost:11434"
     ollama_model_main: str = "qwen3:14b"
     ollama_model_helper: str = "qwen3:4b"

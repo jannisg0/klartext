@@ -1,20 +1,22 @@
 """End-to-end tests for the FastAPI app.
 
 The Services dataclass is injected with fakes so tests don't need
-Ollama, ChromaDB, BGE-M3, or a cross-encoder running.
+MLX, ChromaDB, BGE-M3, or a cross-encoder running.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import Settings
-from backend.llm import GenerationConfig, OllamaLLM
+from backend.llm import GenerationConfig, MlxLLM
 from backend.main import Services, create_app
 from backend.reranker import CrossEncoderReranker
 from backend.retriever import HybridRetriever
@@ -56,18 +58,24 @@ class _FakeEmbedder:
         return [[1.0, 2.0, 3.0] for _ in texts]
 
 
+class _FakeTokenizer:
+    def apply_chat_template(self, messages, *, add_generation_prompt, tokenize):
+        return "\n".join(f"{m['role']}:{m['content']}" for m in messages)
+
+
 @dataclass
-class _FakeOllama:
+class _FakeMlxRuntime:
     main_chunks: list[str] = field(default_factory=list)
     helper_response: str = ""
 
-    def chat(self, *, model, messages, stream, options=None):
+    def stream_generate(
+        self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int
+    ) -> Iterator[Any]:
         for token in self.main_chunks:
-            yield {"message": {"content": token}, "done": False}
-        yield {"message": {"content": ""}, "done": True}
+            yield SimpleNamespace(text=token)
 
-    def generate(self, *, model, prompt, stream, options=None):
-        return {"response": self.helper_response}
+    def generate(self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int) -> str:
+        return self.helper_response
 
 
 @dataclass
@@ -84,7 +92,7 @@ def _build_services(
     score_map: dict[str, float] | None = None,
     threshold: float = 0.3,
     persona_tweets: dict[str, list[str]] | None = None,
-    ollama_ok: bool = True,
+    llm_ok: bool = True,
     bm25_ok: bool = True,
     chroma_docs: dict[str, tuple[str, dict]] | None = None,
 ) -> Services:
@@ -112,21 +120,26 @@ def _build_services(
     scorer = _FakeScorer(score_map=score_map or {})
     reranker = CrossEncoderReranker(scorer=scorer, threshold=threshold)
 
-    ollama = _FakeOllama(
+    runtime = _FakeMlxRuntime(
         main_chunks=main_chunks if main_chunks is not None else ["Hallo ", "Welt", "."],
         helper_response="alt 1\nalt 2",
     )
-    main_llm = OllamaLLM(client=ollama, config=GenerationConfig(model="qwen3:14b"))
-    helper_llm = OllamaLLM(client=ollama, config=GenerationConfig(model="qwen3:4b"))
+    tokenizer = _FakeTokenizer()
+    llm = MlxLLM(
+        model=object(),
+        tokenizer=tokenizer,
+        runtime=runtime,
+        config=GenerationConfig(model="mlx-community/test"),
+    )
 
     return Services(
         settings=settings,
         retriever=retriever,
         reranker=reranker,
-        main_llm=main_llm,
-        helper_llm=helper_llm,
+        main_llm=llm,
+        helper_llm=llm,
         persona_tweets=persona_tweets or {},
-        ollama_probe=lambda: ollama_ok,
+        llm_probe=lambda: llm_ok,
         chromadb_probe=chroma.count,
         bm25_probe=lambda: bm25_ok,
     )
@@ -173,8 +186,8 @@ def test_health_all_systems_ok_returns_status_ok():
     assert body["chunks"] >= 2
 
 
-def test_health_broken_ollama_returns_degraded():
-    app = create_app(services=_build_services(ollama_ok=False))
+def test_health_broken_llm_returns_degraded():
+    app = create_app(services=_build_services(llm_ok=False))
     client = TestClient(app)
 
     resp = client.get("/health")

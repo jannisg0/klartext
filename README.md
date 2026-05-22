@@ -5,15 +5,19 @@ Er beantwortet Fragen zu Wahlprogrammen auf Basis verifizierter
 Quellenangaben und kann optional im Stil ausgewählter Politiker:innen
 antworten. Die Pipeline kombiniert Hybrid Retrieval (Dense + Sparse + RRF),
 Cross-Encoder Reranking, Contextual Chunks und post-hoc Citation
-Verification. Alles läuft lokal über Ollama – keine Daten verlassen den
-Rechner.
+Verification. Alles läuft lokal nativ auf Apple Silicon via MLX – keine
+Daten verlassen den Rechner.
 
 ## Stack
 
 - **Python ≥3.11**, Package Manager: **uv**
-- **LLMs (Ollama)**: `qwen3:14b` (Haupt), `qwen3:4b` (Hilfs)
-- **Embeddings**: `BAAI/bge-m3` (dense + sparse aus einem Modell)
-- **Reranker**: `BAAI/bge-reranker-v2-m3` (Cross-Encoder)
+- **LLM (MLX)**: `mlx-community/gemma-4-e4b-it-OptiQ-4bit`
+  (Haupt + Hilfs – ein Gewichtssatz, beide Rollen). Per
+  `LLM_BACKEND=ollama` lässt sich der alte Ollama-Pfad (`qwen3:14b` /
+  `qwen3:4b`) für A/B-Vergleiche reaktivieren.
+- **Embeddings**: `BAAI/bge-m3` via FlagEmbedding (dense + sparse)
+- **Reranker**: `mlx-community/bge-reranker-v2-m3-4bit` (MLX), Fallback
+  auf `BAAI/bge-reranker-v2-m3` via sentence-transformers
 - **Vector DB**: ChromaDB (lokal, persistiert)
 - **Sparse Index**: `rank_bm25`
 - **PDF-Parsing**: PyMuPDF
@@ -25,20 +29,21 @@ Rechner.
 
 ## Setup
 
-1. `brew install uv ollama git`
-2. `ollama serve` (oder als Service)
-3. `ollama pull qwen3:14b`
-4. `ollama pull qwen3:4b`
-5. `uv sync`
-6. `uv run pre-commit install`
-7. `cp .env.example .env` und ggf. anpassen
-8. Wahlprogramm-PDFs in `data/manifestos/` ablegen (z.B. `spd.pdf`, `cdu.pdf`, ...)
-9. Tweet-JSONs in `data/tweets/` ablegen (Format: siehe `_example.json`)
-10. `data/eval/goldset.json` mit Q&A-Paaren befüllen (~30-50)
-11. `uv run python scripts/ingest.py`
-12. `uv run python scripts/eval.py` (Baseline messen)
-13. `uv run uvicorn backend.main:app --reload --port 8000`
-14. `cd frontend && npm install && npm run dev`
+1. `brew install uv git` (Apple Silicon Mac vorausgesetzt)
+2. `uv sync` (lädt mlx-lm + FlagEmbedding etc.)
+3. `uv run pre-commit install`
+4. `cp .env.example .env` und ggf. anpassen
+5. Wahlprogramm-PDFs in `data/manifestos/` ablegen (z.B. `spd.pdf`, `cdu.pdf`, ...)
+6. Tweet-JSONs in `data/tweets/` ablegen (Format: siehe `_example.json`)
+7. `data/eval/goldset.json` mit Q&A-Paaren befüllen (~30-50)
+8. `uv run python scripts/ingest.py` (erster Lauf zieht das MLX-Modell
+   von HuggingFace, ~5 GB; danach gecached)
+9. `uv run python scripts/eval.py` (Baseline messen)
+10. `uv run uvicorn backend.main:app --reload --port 8000`
+11. `cd frontend && npm install && npm run dev`
+
+Wer den Ollama-Pfad bevorzugt: `LLM_BACKEND=ollama` setzen, `ollama serve`
+laufen lassen und `ollama pull qwen3:14b qwen3:4b`.
 
 ## Daten beschaffen
 
@@ -52,7 +57,8 @@ Rechner.
 
 ## Pipeline-Übersicht
 
-Bei jeder Frage werden zunächst alternative Formulierungen via `qwen3:4b`
+Bei jeder Frage werden zunächst alternative Formulierungen via dem
+Helper-Modell (MLX Gemma 4 E4B, oder Ollama-Helper im Escape-Hatch)
 generiert, dann parallel **Dense** (BGE-M3 + ChromaDB) und **Sparse** (BM25)
 Retrieval durchgeführt. Die Ergebnislisten werden via **Reciprocal Rank
 Fusion** kombiniert und durch einen **Cross-Encoder Reranker** auf die Top 5

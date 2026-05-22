@@ -1,57 +1,67 @@
-"""Tests for the Ollama LLM wrapper.
+"""Tests for the MLX LLM wrapper.
 
-The ollama client is injected so tests don't touch a real Ollama server.
+The MLX runtime is injected behind a Protocol so tests don't need
+``mlx_lm`` installed (it ships darwin-arm64 only).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from backend.llm import GenerationConfig, OllamaLLM
+from backend.llm import GenerationConfig, MlxLLM
 from backend.prompt_builder import Message
 
 
+class _FakeTokenizer:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, str]]] = []
+
+    def apply_chat_template(self, messages, *, add_generation_prompt: bool, tokenize: bool) -> str:
+        assert add_generation_prompt is True
+        assert tokenize is False
+        self.calls.append(list(messages))
+        return "\n".join(f"{m['role']}:{m['content']}" for m in messages) + "\nassistant:"
+
+
 @dataclass
-class _FakeOllama:
-    """Minimal stand-in for ``ollama.Client``."""
+class _FakeMlxRuntime:
+    """Minimal stand-in for ``mlx_lm.stream_generate`` / ``mlx_lm.generate``."""
 
     chat_chunks: list[str] = field(default_factory=list)
     generate_response: str = ""
-    chat_calls: list[dict] = field(default_factory=list)
-    generate_calls: list[dict] = field(default_factory=list)
+    stream_calls: list[dict[str, Any]] = field(default_factory=list)
+    generate_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def chat(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, str]],
-        stream: bool,
-        options: dict | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        self.chat_calls.append(
-            {"model": model, "messages": messages, "stream": stream, "options": options}
-        )
-        assert stream is True
+    def stream_generate(
+        self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int
+    ) -> Iterator[Any]:
+        self.stream_calls.append({"prompt": prompt, "max_tokens": max_tokens})
         for token in self.chat_chunks:
-            yield {"message": {"content": token}, "done": False}
-        yield {"message": {"content": ""}, "done": True}
+            yield SimpleNamespace(text=token)
 
-    def generate(
-        self, *, model: str, prompt: str, stream: bool, options: dict | None = None
-    ) -> dict[str, Any]:
-        self.generate_calls.append(
-            {"model": model, "prompt": prompt, "stream": stream, "options": options}
-        )
-        return {"response": self.generate_response}
+    def generate(self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int) -> str:
+        self.generate_calls.append({"prompt": prompt, "max_tokens": max_tokens})
+        return self.generate_response
+
+
+_FAKE_MODEL = object()
+
+
+def _build(runtime: _FakeMlxRuntime, **cfg_kwargs) -> tuple[MlxLLM, _FakeTokenizer]:
+    tokenizer = _FakeTokenizer()
+    config = GenerationConfig(model=cfg_kwargs.pop("model", "mlx-community/test"), **cfg_kwargs)
+    llm = MlxLLM(model=_FAKE_MODEL, tokenizer=tokenizer, runtime=runtime, config=config)
+    return llm, tokenizer
 
 
 def test_chat_stream_yields_token_strings():
-    client = _FakeOllama(chat_chunks=["Hallo ", "Welt", "."])
-    llm = OllamaLLM(client=client, config=GenerationConfig(model="qwen3:14b"))
+    runtime = _FakeMlxRuntime(chat_chunks=["Hallo ", "Welt", "."])
+    llm, _ = _build(runtime)
 
     tokens = list(
         llm.chat_stream(
@@ -65,9 +75,9 @@ def test_chat_stream_yields_token_strings():
     assert tokens == ["Hallo ", "Welt", "."]
 
 
-def test_chat_stream_forwards_model_and_messages():
-    client = _FakeOllama(chat_chunks=["x"])
-    llm = OllamaLLM(client=client, config=GenerationConfig(model="qwen3:14b"))
+def test_chat_stream_applies_chat_template_with_role_payload():
+    runtime = _FakeMlxRuntime(chat_chunks=["x"])
+    llm, tokenizer = _build(runtime)
 
     list(
         llm.chat_stream(
@@ -75,43 +85,38 @@ def test_chat_stream_forwards_model_and_messages():
         )
     )
 
-    call = client.chat_calls[0]
-    assert call["model"] == "qwen3:14b"
-    assert call["messages"] == [
-        {"role": "system", "content": "rules"},
-        {"role": "user", "content": "q"},
+    assert tokenizer.calls == [
+        [
+            {"role": "system", "content": "rules"},
+            {"role": "user", "content": "q"},
+        ]
     ]
-    assert call["stream"] is True
+    assert runtime.stream_calls[0]["prompt"].startswith("system:rules\nuser:q")
 
 
-def test_chat_stream_passes_generation_options():
-    client = _FakeOllama(chat_chunks=["x"])
-    config = GenerationConfig(model="qwen3:14b", temperature=0.5, num_ctx=4096)
-    llm = OllamaLLM(client=client, config=config)
+def test_chat_stream_forwards_max_tokens_from_config():
+    runtime = _FakeMlxRuntime(chat_chunks=["x"])
+    llm, _ = _build(runtime, num_ctx=4096)
 
     list(llm.chat_stream([Message(role="user", content="q")]))
 
-    opts = client.chat_calls[0]["options"]
-    assert opts["temperature"] == 0.5
-    assert opts["num_ctx"] == 4096
+    assert runtime.stream_calls[0]["max_tokens"] == 4096
 
 
-def test_generate_returns_response_text():
-    client = _FakeOllama(generate_response="One sentence here.")
-    llm = OllamaLLM(client=client, config=GenerationConfig(model="qwen3:4b"))
+def test_generate_wraps_prompt_in_user_message_and_returns_text():
+    runtime = _FakeMlxRuntime(generate_response="One sentence here.")
+    llm, tokenizer = _build(runtime)
 
     out = llm.generate("Write one sentence.")
 
     assert out == "One sentence here."
-    assert client.generate_calls[0]["model"] == "qwen3:4b"
-    assert client.generate_calls[0]["stream"] is False
-    assert client.generate_calls[0]["prompt"] == "Write one sentence."
+    assert tokenizer.calls == [[{"role": "user", "content": "Write one sentence."}]]
+    assert runtime.generate_calls[0]["prompt"].startswith("user:Write one sentence.")
 
 
-def test_chat_stream_stops_at_done_event():
-    """Empty chat_chunks still produces a clean iteration."""
-    client = _FakeOllama(chat_chunks=[])
-    llm = OllamaLLM(client=client, config=GenerationConfig(model="qwen3:14b"))
+def test_chat_stream_empty_chunks_produces_empty_iteration():
+    runtime = _FakeMlxRuntime(chat_chunks=[])
+    llm, _ = _build(runtime)
 
     tokens = list(llm.chat_stream([Message(role="user", content="q")]))
 
@@ -119,13 +124,37 @@ def test_chat_stream_stops_at_done_event():
 
 
 def test_chat_stream_skips_empty_token_payloads():
-    """Some Ollama versions emit final 'done' frames with empty content; skip them."""
-    client = _FakeOllama(chat_chunks=["", "hi", ""])
-    llm = OllamaLLM(client=client, config=GenerationConfig(model="qwen3:14b"))
+    runtime = _FakeMlxRuntime(chat_chunks=["", "hi", ""])
+    llm, _ = _build(runtime)
 
     tokens = list(llm.chat_stream([Message(role="user", content="q")]))
 
     assert tokens == ["hi"]
+
+
+def test_chat_stream_accepts_plain_string_responses():
+    """Some MLX wrappers yield raw strings rather than ``GenerationResponse``."""
+
+    @dataclass
+    class _StringRuntime:
+        chunks: list[str]
+
+        def stream_generate(self, *, model, tokenizer, prompt, max_tokens):
+            yield from self.chunks
+
+        def generate(self, *, model, tokenizer, prompt, max_tokens):  # pragma: no cover
+            return ""
+
+    runtime = _StringRuntime(chunks=["a", "b", "c"])
+    tokenizer = _FakeTokenizer()
+    llm = MlxLLM(
+        model=_FAKE_MODEL,
+        tokenizer=tokenizer,
+        runtime=runtime,
+        config=GenerationConfig(model="mlx-community/test"),
+    )
+
+    assert list(llm.chat_stream([Message(role="user", content="q")])) == ["a", "b", "c"]
 
 
 def test_generation_config_requires_model_name():

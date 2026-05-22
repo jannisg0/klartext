@@ -6,8 +6,9 @@ Tweets:       JSON -> embedded -> ChromaDB (``klartext_tweets``).
 
 The orchestration functions take the LLM, embedder, and collection as
 arguments so they can be exercised in unit tests with fakes. ``main()``
-wires up the real Ollama + BGE-M3 + ChromaDB stack and is what
-``uv run python scripts/ingest.py`` calls.
+wires up the real LLM (MLX by default, Ollama via ``LLM_BACKEND``) +
+BGE-M3 + ChromaDB stack and is what ``uv run python scripts/ingest.py``
+calls.
 """
 
 from __future__ import annotations
@@ -172,11 +173,57 @@ def ingest_tweets(
     return len(items)
 
 
-def main() -> None:
-    """CLI entry. Wires up real Ollama, BGE-M3, ChromaDB from env."""
+def _build_helper_llm():
+    """Build the helper LLM (MLX by default, Ollama via ``LLM_BACKEND=ollama``).
+
+    The enricher only needs ``generate(prompt) -> str``; both backends
+    satisfy that contract.
+    """
     import os
 
-    import ollama as ollama_lib
+    backend = os.getenv("LLM_BACKEND", "mlx").lower()
+    if backend == "ollama":
+        import ollama as ollama_lib
+
+        ollama_client = ollama_lib.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+        helper_model = os.getenv("OLLAMA_MODEL_HELPER", "qwen3:4b")
+
+        class _OllamaHelper:
+            def generate(self, prompt: str) -> str:
+                res = ollama_client.generate(model=helper_model, prompt=prompt, stream=False)
+                return res["response"]
+
+        return _OllamaHelper()
+
+    from mlx_lm import generate as mlx_generate
+    from mlx_lm import load as mlx_load
+
+    model_id = os.getenv("MLX_MODEL_LLM", "mlx-community/gemma-4-e4b-it-OptiQ-4bit")
+    max_tokens = int(os.getenv("MLX_MAX_TOKENS", "1024"))
+    mlx_model, mlx_tokenizer = mlx_load(model_id)
+
+    class _MlxHelper:
+        def generate(self, prompt: str) -> str:
+            text_prompt = mlx_tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                add_generation_prompt=True,
+                tokenize=False,
+            )
+            return mlx_generate(
+                mlx_model,
+                mlx_tokenizer,
+                prompt=text_prompt,
+                max_tokens=max_tokens,
+                verbose=False,
+            )
+
+    return _MlxHelper()
+
+
+def main() -> None:
+    """CLI entry. Wires up the helper LLM + BGE-M3 + ChromaDB from env."""
+    import os
+
     from dotenv import load_dotenv
     from FlagEmbedding import BGEM3FlagModel
 
@@ -189,13 +236,7 @@ def main() -> None:
     chromadb_path = Path(os.getenv("CHROMADB_PATH", str(project_root / "chromadb")))
     bm25_path = chromadb_path / "bm25_index.pkl"
 
-    ollama_client = ollama_lib.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
-    helper_model = os.getenv("OLLAMA_MODEL_HELPER", "qwen3:4b")
-
-    class OllamaLLM:
-        def generate(self, prompt: str) -> str:
-            res = ollama_client.generate(model=helper_model, prompt=prompt, stream=False)
-            return res["response"]
+    helper_llm = _build_helper_llm()
 
     class BgeEmbedder:
         def __init__(self) -> None:
@@ -216,7 +257,7 @@ def main() -> None:
 
     enrichment_enabled = os.getenv("CONTEXTUAL_ENRICHMENT_ENABLED", "true").lower() == "true"
     enricher = ContextEnricher(
-        llm=OllamaLLM(),
+        llm=helper_llm,
         cache_path=chromadb_path / "enrichment_cache.json",
         enabled=enrichment_enabled,
     )

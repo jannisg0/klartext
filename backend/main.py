@@ -3,7 +3,7 @@
 The runtime pipeline lives in a ``Services`` container that's injected
 once at app creation. Production callers use ``create_app()`` with no
 arguments, which builds real services from environment settings; tests
-pass a hand-built ``Services`` so they don't need Ollama, ChromaDB,
+pass a hand-built ``Services`` so they don't need MLX, ChromaDB,
 BGE-M3, or a real cross-encoder running.
 """
 
@@ -23,7 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.citation_verifier import verify_citations
 from backend.config import Settings, get_settings
-from backend.llm import OllamaLLM
+from backend.llm import MlxLLM, OllamaLLM
 from backend.models import (
     ChatRequest,
     CitationItem,
@@ -47,10 +47,13 @@ class Services:
     settings: Settings
     retriever: HybridRetriever
     reranker: CrossEncoderReranker
-    main_llm: OllamaLLM
-    helper_llm: OllamaLLM
+    main_llm: MlxLLM | OllamaLLM
+    helper_llm: MlxLLM | OllamaLLM
     persona_tweets: dict[str, list[str]]
-    ollama_probe: Callable[[], bool]
+    # ``llm_probe`` returns whether the LLM backend is ready. Surfaced on
+    # ``/health`` under the legacy field name ``ollama`` to keep the
+    # response shape stable for existing API consumers.
+    llm_probe: Callable[[], bool]
     chromadb_probe: Callable[[], int]
     bm25_probe: Callable[[], bool]
 
@@ -93,8 +96,8 @@ def _citations_payload(verification) -> dict[str, Any]:
 async def _stream_chat(req: ChatRequest, services: Services) -> AsyncIterator[dict[str, Any]]:
     settings = services.settings
 
-    # Each model call is sync (ollama, BGE-M3, sentence-transformers). Run it on
-    # a threadpool so other ASGI requests (notably /health) can still progress
+    # Each model call is sync (MLX, BGE-M3, cross-encoder). Run it on a
+    # threadpool so other ASGI requests (notably /health) can still progress
     # and so the SSE response can flush each yield without head-of-line blocking.
     queries = await run_in_threadpool(
         expand_query,
@@ -152,7 +155,7 @@ async def _stream_chat(req: ChatRequest, services: Services) -> AsyncIterator[di
     parts: list[str] = []
     token_iter = services.main_llm.chat_stream(messages)
 
-    # iterate the sync ollama stream one token at a time on a threadpool so the
+    # iterate the sync LLM stream one token at a time on a threadpool so the
     # event loop can yield each SSE frame as it arrives.
     sentinel = object()
 
@@ -181,14 +184,14 @@ _ServicesDep = Annotated[Services, Depends(get_services)]
 def _register_routes(app: FastAPI) -> None:
     @app.get("/health", response_model=HealthResponse)
     async def health(services: _ServicesDep) -> HealthResponse:
-        ollama_ok = bool(services.ollama_probe())
+        llm_ok = bool(services.llm_probe())
         chunks = int(services.chromadb_probe())
         bm25_ok = bool(services.bm25_probe())
         chromadb_ok = chunks > 0
-        status = "ok" if (ollama_ok and chromadb_ok and bm25_ok) else "degraded"
+        status = "ok" if (llm_ok and chromadb_ok and bm25_ok) else "degraded"
         return HealthResponse(
             status=status,
-            ollama=ollama_ok,
+            ollama=llm_ok,
             chromadb=chromadb_ok,
             bm25=bm25_ok,
             chunks=chunks,
@@ -226,7 +229,10 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def lifespan(fastapi_app: FastAPI):
         settings = get_settings()
         fastapi_app.state.services = build_production_services(settings)
-        log.info("app.started", model=settings.ollama_model_main)
+        active_model = (
+            settings.mlx_model_llm if settings.llm_backend == "mlx" else settings.ollama_model_main
+        )
+        log.info("app.started", backend=settings.llm_backend, model=active_model)
         yield
 
     app = FastAPI(title="Klartext", lifespan=lifespan)
@@ -235,20 +241,131 @@ def create_app(services: Services | None = None) -> FastAPI:
     return app
 
 
+def _build_llm(
+    settings: Settings,
+) -> tuple[MlxLLM | OllamaLLM, MlxLLM | OllamaLLM, Callable[[], bool]]:
+    """Build (main_llm, helper_llm, probe) for the configured backend."""
+    from backend.llm import GenerationConfig
+
+    if settings.llm_backend == "mlx":
+        from mlx_lm import generate as mlx_generate
+        from mlx_lm import load as mlx_load
+        from mlx_lm import stream_generate as mlx_stream_generate
+
+        @dataclass
+        class _DefaultMlxRuntime:
+            def stream_generate(self, *, model, tokenizer, prompt, max_tokens):
+                return mlx_stream_generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens)
+
+            def generate(self, *, model, tokenizer, prompt, max_tokens):
+                return mlx_generate(
+                    model, tokenizer, prompt=prompt, max_tokens=max_tokens, verbose=False
+                )
+
+        mlx_model, mlx_tokenizer = mlx_load(settings.mlx_model_llm)
+        runtime = _DefaultMlxRuntime()
+        cfg = GenerationConfig(model=settings.mlx_model_llm, num_ctx=settings.mlx_max_tokens)
+        llm = MlxLLM(model=mlx_model, tokenizer=mlx_tokenizer, runtime=runtime, config=cfg)
+        # Helper role reuses the same loaded weights — one set in memory.
+        return llm, llm, lambda: True
+
+    import ollama as ollama_lib
+
+    ollama_client = ollama_lib.Client(host=settings.ollama_host)
+    main_llm = OllamaLLM(
+        client=ollama_client,
+        config=GenerationConfig(model=settings.ollama_model_main),
+    )
+    helper_llm = OllamaLLM(
+        client=ollama_client,
+        config=GenerationConfig(model=settings.ollama_model_helper),
+    )
+
+    def _ollama_probe() -> bool:
+        try:
+            ollama_client.list()
+        except Exception:
+            return False
+        return True
+
+    return main_llm, helper_llm, _ollama_probe
+
+
+def _build_scorer(settings: Settings):
+    """Cross-encoder scorer. Tries MLX first, falls back to sentence-transformers."""
+    try:
+        from mlx_embeddings.utils import load as mlx_emb_load  # type: ignore[import-not-found]
+    except Exception:
+        log.info("reranker.mlx_unavailable", reason="mlx_embeddings not installed")
+        return _build_sentence_transformers_scorer(settings)
+
+    try:
+        model, tokenizer = mlx_emb_load(settings.mlx_model_reranker)
+    except Exception as exc:
+        log.warning(
+            "reranker.mlx_load_failed",
+            model=settings.mlx_model_reranker,
+            error=str(exc),
+        )
+        return _build_sentence_transformers_scorer(settings)
+
+    import mlx.core as mx  # type: ignore[import-not-found]
+    import numpy as _np
+
+    class _MlxScorer:
+        def score(self, pairs):
+            texts_a = [q for q, _ in pairs]
+            texts_b = [t for _, t in pairs]
+            enc = tokenizer(
+                texts_a,
+                texts_b,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors="np",
+            )
+            out = model(mx.array(enc["input_ids"]), mx.array(enc["attention_mask"]))
+            logits = _np.asarray(out.logits if hasattr(out, "logits") else out)
+            if logits.ndim == 2 and logits.shape[-1] == 1:
+                logits = logits[:, 0]
+            return (1.0 / (1.0 + _np.exp(-logits))).tolist()
+
+    log.info("reranker.mlx_loaded", model=settings.mlx_model_reranker)
+    return _MlxScorer()
+
+
+def _build_sentence_transformers_scorer(settings: Settings):
+    from sentence_transformers import CrossEncoder
+
+    # CrossEncoder uses the fast tokenizer path; FlagReranker still calls
+    # the removed slow-tokenizer ``prepare_for_model`` on transformers 5.x.
+    reranker_model = CrossEncoder(settings.reranker_model, max_length=512)
+
+    class _StScorer:
+        def score(self, pairs):
+            import numpy as _np
+
+            scores = reranker_model.predict(
+                [(q, t) for q, t in pairs],
+                activation_fn=None,
+                convert_to_numpy=True,
+            )
+            # Map raw logits to [0, 1] via sigmoid so the threshold (0.3) keeps meaning.
+            return (1.0 / (1.0 + _np.exp(-scores))).tolist()
+
+    log.info("reranker.st_loaded", model=settings.reranker_model)
+    return _StScorer()
+
+
 def build_production_services(settings: Settings) -> Services:
-    """Wire up the real Ollama + ChromaDB + BM25 + BGE-M3 + reranker stack."""
+    """Wire up the real LLM + ChromaDB + BM25 + BGE-M3 + reranker stack."""
     import json as _json
     from pathlib import Path as _Path
 
-    import ollama as ollama_lib
     from FlagEmbedding import BGEM3FlagModel
-    from sentence_transformers import CrossEncoder
 
     import chromadb
     from backend.bm25_index import Bm25Index
-    from backend.llm import GenerationConfig
-
-    ollama_client = ollama_lib.Client(host=settings.ollama_host)
 
     chroma_client = chromadb.PersistentClient(path=str(settings.chromadb_path))
     manifestos = chroma_client.get_or_create_collection("klartext_manifestos")
@@ -275,33 +392,11 @@ def build_production_services(settings: Settings) -> Services:
             )
             return out["dense_vecs"].tolist()
 
-    # CrossEncoder uses the fast tokenizer path; FlagReranker still calls
-    # the removed slow-tokenizer ``prepare_for_model`` on transformers 5.x.
-    reranker_model = CrossEncoder(settings.reranker_model, max_length=512)
-
-    class _Scorer:
-        def score(self, pairs):
-            scores = reranker_model.predict(
-                [(q, t) for q, t in pairs],
-                activation_fn=None,
-                convert_to_numpy=True,
-            )
-            import numpy as _np
-
-            # Map raw logits to [0, 1] via sigmoid so the threshold (0.3) keeps meaning.
-            return (1.0 / (1.0 + _np.exp(-scores))).tolist()
-
+    scorer = _build_scorer(settings)
     retriever = HybridRetriever(collection=manifestos, bm25=bm25, embedder=_Embedder())
-    reranker = CrossEncoderReranker(scorer=_Scorer(), threshold=settings.rerank_score_threshold)
+    reranker = CrossEncoderReranker(scorer=scorer, threshold=settings.rerank_score_threshold)
 
-    main_llm = OllamaLLM(
-        client=ollama_client,
-        config=GenerationConfig(model=settings.ollama_model_main),
-    )
-    helper_llm = OllamaLLM(
-        client=ollama_client,
-        config=GenerationConfig(model=settings.ollama_model_helper),
-    )
+    main_llm, helper_llm, llm_probe = _build_llm(settings)
 
     persona_tweets: dict[str, list[str]] = {}
     tweets_dir = _Path("data/tweets")
@@ -311,13 +406,6 @@ def build_production_services(settings: Settings) -> Services:
         data = _json.loads(path.read_text(encoding="utf-8"))
         persona_tweets[data["politician"]] = [t["text"] for t in data.get("tweets", [])]
 
-    def _ollama_probe() -> bool:
-        try:
-            ollama_client.list()
-        except Exception:
-            return False
-        return True
-
     return Services(
         settings=settings,
         retriever=retriever,
@@ -325,7 +413,7 @@ def build_production_services(settings: Settings) -> Services:
         main_llm=main_llm,
         helper_llm=helper_llm,
         persona_tweets=persona_tweets,
-        ollama_probe=_ollama_probe,
+        llm_probe=llm_probe,
         chromadb_probe=manifestos.count,
         bm25_probe=lambda: settings.bm25_path.exists(),
     )
