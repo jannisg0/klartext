@@ -1,12 +1,17 @@
+import ChatWindow from './components/ChatWindow.jsx'
+import DevToggle from './components/DevToggle.jsx'
+import Sidebar from './components/Sidebar.jsx'
+
 export default function App() {
   return (
-    <main className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-semibold mb-3 text-neutral-50">Klartext</h1>
-        <p className="text-neutral-400">
-          Frontend scaffold ready. Design integration kommt in den nächsten Commits.
-        </p>
+    <div className="dark min-h-screen bg-graphite text-bone">
+      <div className="max-w-[1440px] mx-auto p-4">
+        <div className="relative grain h-[calc(100vh-2rem)] rounded-xl overflow-hidden border border-edge bg-graphite grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_380px]">
+          <Sidebar />
+          <ChatWindow />
+        </div>
       </div>
-    </main>
+      <DevToggle />
+    </div>
   )
 }

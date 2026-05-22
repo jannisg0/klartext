@@ -3,12 +3,12 @@
 // registered under `colors.party.*` in tailwind.config.js.
 
 export const PARTIES = [
+  { slug: 'cdu', label: 'CDU / CSU', color: '#000000', tailwindKey: 'cdu' },
   { slug: 'spd', label: 'SPD', color: '#e3000f', tailwindKey: 'spd' },
-  { slug: 'cdu', label: 'CDU', color: '#000000', tailwindKey: 'cdu' },
-  { slug: 'diegrünen', label: 'Grüne', color: '#46962b', tailwindKey: 'gruene' },
+  { slug: 'diegrünen', label: 'Bündnis 90 / Grüne', color: '#46962b', tailwindKey: 'gruene' },
   { slug: 'fdp', label: 'FDP', color: '#ffed00', tailwindKey: 'fdp' },
+  { slug: 'dielinke', label: 'Die Linke', color: '#be3075', tailwindKey: 'linke' },
   { slug: 'afd', label: 'AfD', color: '#009ee0', tailwindKey: 'afd' },
-  { slug: 'dielinke', label: 'Linke', color: '#be3075', tailwindKey: 'linke' },
 ]
 
 export function partyBySlug(slug) {
