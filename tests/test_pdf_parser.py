@@ -1,35 +1,48 @@
-"""Tests for the layout-aware PDF parser."""
+"""Tests for the Markdown-aware PDF parser (pymupdf4llm)."""
 
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
-from backend.pdf_parser import (
-    classify_blocks,
-    detect_heading_sizes,
-    parse_pdf,
-)
+from backend.pdf_parser import MarkdownDocument, MarkdownPage, parse_pdf
 from tests.conftest import PdfLine
 
 
-def test_parse_pdf_returns_blocks_with_text_and_fontsize(simple_pdf):
+def test_parse_pdf_returns_markdown_document(simple_pdf):
     doc = parse_pdf(simple_pdf, party="spd")
 
+    assert isinstance(doc, MarkdownDocument)
     assert doc.party == "spd"
-    texts = [b.text for b in doc.blocks]
-    assert "Wirtschaft" in texts
-    assert "Steuerpolitik" in texts
-    assert any("Vermoegensteuer" in t for t in texts)
+    assert isinstance(doc.pages, list)
+    assert len(doc.pages) >= 1
+    for page in doc.pages:
+        assert isinstance(page, MarkdownPage)
+        assert isinstance(page.text, str)
+        assert page.page >= 1
 
-    sizes_for_wirtschaft = [b.fontsize for b in doc.blocks if b.text == "Wirtschaft"]
-    assert sizes_for_wirtschaft == [pytest.approx(18, abs=0.5)]
-    sizes_for_steuer = [b.fontsize for b in doc.blocks if b.text == "Steuerpolitik"]
-    assert sizes_for_steuer == [pytest.approx(14, abs=0.5)]
 
-    for block in doc.blocks:
-        assert block.page >= 1
-        assert block.fontsize > 0
-        assert block.text.strip() == block.text
+def test_parse_pdf_preserves_party(simple_pdf):
+    doc = parse_pdf(simple_pdf, party="gruene")
+    assert doc.party == "gruene"
+
+
+def test_parse_pdf_source_pdf_recorded(simple_pdf):
+    doc = parse_pdf(simple_pdf, party="spd")
+    assert doc.source_pdf == Path(simple_pdf)
+
+
+def test_parse_pdf_markdown_contains_body_text(simple_pdf):
+    doc = parse_pdf(simple_pdf, party="spd")
+    full_text = "\n".join(p.text for p in doc.pages)
+    assert "Vermoegensteuer" in full_text
+    assert "Mindestlohn" in full_text
+
+
+def test_parse_pdf_headings_appear_in_markdown(simple_pdf):
+    doc = parse_pdf(simple_pdf, party="spd")
+    full_text = "\n".join(p.text for p in doc.pages)
+    assert "Wirtschaft" in full_text
+    assert "Steuerpolitik" in full_text
 
 
 def test_parse_pdf_preserves_page_numbers(make_pdf):
@@ -38,45 +51,24 @@ def test_parse_pdf_preserves_page_numbers(make_pdf):
         PdfLine("second page line", 10),
     ]
     pdf = make_pdf("twopage.pdf", lines)
-
     doc = parse_pdf(pdf, party="cdu")
 
-    by_text = {b.text: b.page for b in doc.blocks}
-    assert by_text["first page line"] == 1
-    assert by_text["second page line"] == 2
+    page_numbers = [p.page for p in doc.pages]
+    assert 1 in page_numbers
+    assert 2 in page_numbers
+    assert all(n >= 1 for n in page_numbers)
 
 
-def test_detect_heading_sizes_returns_top_three_descending(simple_pdf):
-    doc = parse_pdf(simple_pdf, party="spd")
-
-    h1, h2, h3 = detect_heading_sizes(doc.blocks)
-
-    assert h1 > h2 > h3
-    assert h1 == pytest.approx(18, abs=0.5)
-    assert h2 == pytest.approx(14, abs=0.5)
-    assert h3 == pytest.approx(10, abs=0.5)
-
-
-def test_detect_heading_sizes_with_only_one_size(make_pdf):
-    """Documents without headings still yield three sizes (degenerate but defined)."""
-    pdf = make_pdf("flat.pdf", [PdfLine(f"line {i}", 10) for i in range(5)])
+def test_parse_pdf_skips_empty_pages(make_pdf):
+    lines = [PdfLine("some content", 10)]
+    pdf = make_pdf("nonempty.pdf", lines)
     doc = parse_pdf(pdf, party="fdp")
-
-    sizes = detect_heading_sizes(doc.blocks)
-
-    assert len(sizes) == 3
-    assert sizes[0] >= sizes[1] >= sizes[2]
+    assert len(doc.pages) >= 1
+    for p in doc.pages:
+        assert p.text.strip()
 
 
-def test_classify_blocks_labels_heading_levels(simple_pdf):
-    doc = parse_pdf(simple_pdf, party="spd")
-    sizes = detect_heading_sizes(doc.blocks)
-
-    classified = classify_blocks(doc.blocks, sizes)
-
-    by_text = {c.text: c for c in classified if c.text in {"Wirtschaft", "Steuerpolitik"}}
-    assert by_text["Wirtschaft"].heading_level == 1
-    assert by_text["Steuerpolitik"].heading_level == 2
-
-    body_blocks = [c for c in classified if c.heading_level == 0]
-    assert any("Vermoegensteuer" in c.text for c in body_blocks)
+def test_parse_pdf_accepts_path_str(simple_pdf):
+    doc = parse_pdf(str(simple_pdf), party="spd")
+    assert doc.party == "spd"
+    assert len(doc.pages) >= 1

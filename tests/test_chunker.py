@@ -1,40 +1,49 @@
-"""Tests for the structure-aware chunker.
+"""Tests for the Markdown-aware chunker.
 
 The chunker must:
 - emit chunks with deterministic IDs ``{party}_p{page}_c{idx}``
-- carry ``section_path`` metadata such as "Wirtschaft > Steuerpolitik"
-- NEVER merge text across section boundaries (even if a section is short)
+- carry ``section_path`` derived from Markdown heading hierarchy
+- NEVER merge text across section boundaries
 - respect chunk_size + overlap inside a single section
+- never split inside a Markdown table block
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.chunker import chunk_document
-from backend.pdf_parser import ClassifiedBlock
+from backend.pdf_parser import MarkdownDocument, MarkdownPage
 
 
-def _block(text: str, level: int, page: int = 1, fontsize: float = 10.0) -> ClassifiedBlock:
-    return ClassifiedBlock(
-        text=text, fontsize=fontsize, page=page, bbox=(0, 0, 0, 0), heading_level=level
+def _doc(markdown: str, party: str = "spd", page: int = 1) -> MarkdownDocument:
+    return MarkdownDocument(
+        party=party,
+        pages=[MarkdownPage(text=markdown, page=page)],
+        source_pdf=Path("dummy.pdf"),
     )
 
 
-def _whitespace_tokens(text: str) -> list[str]:
-    return text.split()
+def _multipage_doc(pages: list[tuple[str, int]], party: str = "spd") -> MarkdownDocument:
+    return MarkdownDocument(
+        party=party,
+        pages=[MarkdownPage(text=text, page=p) for text, p in pages],
+        source_pdf=Path("dummy.pdf"),
+    )
+
+
+# ─── basic behaviour ────────────────────────────────────────────────────────
 
 
 def test_chunker_returns_chunks_with_required_metadata():
-    blocks = [
-        _block("Wirtschaft", 1),
-        _block("Steuerpolitik", 2),
-        _block("Vermoegensteuer wird wieder eingefuehrt.", 0, page=3),
-    ]
-
-    chunks = chunk_document(
-        party="spd", blocks=blocks, chunk_size=50, overlap=10, tokenize=_whitespace_tokens
+    doc = _doc(
+        "# Wirtschaft\n\n## Steuerpolitik\n\nVermoegensteuer wird wieder eingefuehrt.",
+        party="spd",
+        page=3,
     )
+    chunks = chunk_document(doc)
 
     assert len(chunks) == 1
     c = chunks[0]
@@ -46,17 +55,14 @@ def test_chunker_returns_chunks_with_required_metadata():
 
 
 def test_chunker_never_crosses_section_boundaries():
-    blocks = [
-        _block("Wirtschaft", 1),
-        _block("Steuerpolitik", 2, page=1),
-        _block("Wir wollen die Vermoegensteuer.", 0, page=1),
-        _block("Arbeitsmarkt", 2, page=2),
-        _block("Mindestlohn auf 15 Euro.", 0, page=2),
-    ]
-
-    chunks = chunk_document(
-        party="spd", blocks=blocks, chunk_size=500, overlap=100, tokenize=_whitespace_tokens
+    doc = _doc(
+        "# Wirtschaft\n\n"
+        "## Steuerpolitik\n\n"
+        "Wir wollen die Vermoegensteuer.\n\n"
+        "## Arbeitsmarkt\n\n"
+        "Mindestlohn auf 15 Euro."
     )
+    chunks = chunk_document(doc)
 
     paths = {c.section_path for c in chunks}
     assert paths == {"Wirtschaft > Steuerpolitik", "Wirtschaft > Arbeitsmarkt"}
@@ -68,18 +74,11 @@ def test_chunker_never_crosses_section_boundaries():
 
 
 def test_chunker_splits_long_section_with_overlap():
-    """A single section longer than chunk_size yields multiple chunks with overlap."""
     words = [f"wort{i}" for i in range(120)]
     body = " ".join(words)
-    blocks = [
-        _block("Wirtschaft", 1),
-        _block("Steuerpolitik", 2),
-        _block(body, 0),
-    ]
+    doc = _doc(f"# Wirtschaft\n\n## Steuerpolitik\n\n{body}")
 
-    chunks = chunk_document(
-        party="spd", blocks=blocks, chunk_size=50, overlap=10, tokenize=_whitespace_tokens
-    )
+    chunks = chunk_document(doc, chunk_size=50, overlap=10)
 
     assert len(chunks) >= 3
     ids = [c.chunk_id for c in chunks]
@@ -90,48 +89,81 @@ def test_chunker_splits_long_section_with_overlap():
     assert first_tail == second_head
 
     for c in chunks:
-        assert len(_whitespace_tokens(c.text)) <= 50
+        assert len(c.text.split()) <= 50
 
 
 def test_chunker_skips_empty_sections():
-    """Sections that contain only headings (no body) emit no chunks."""
-    blocks = [
-        _block("Wirtschaft", 1),
-        _block("Steuerpolitik", 2),
-        _block("Arbeitsmarkt", 2),
-        _block("Mindestlohn", 0, page=4),
-    ]
-
-    chunks = chunk_document(
-        party="spd", blocks=blocks, chunk_size=500, overlap=100, tokenize=_whitespace_tokens
+    doc = _doc(
+        "# Wirtschaft\n\n" "## Steuerpolitik\n\n" "## Arbeitsmarkt\n\n" "Mindestlohn auf 15 Euro.",
+        page=4,
     )
+    chunks = chunk_document(doc)
 
     assert len(chunks) == 1
     assert chunks[0].section_path == "Wirtschaft > Arbeitsmarkt"
 
 
-def test_chunker_uses_first_page_of_section_for_metadata():
-    """A chunk's page is the first page on which its source text appears."""
-    blocks = [
-        _block("Wirtschaft", 1, page=5),
-        _block("Body line one.", 0, page=5),
-        _block("Body line two.", 0, page=6),
-    ]
-
-    chunks = chunk_document(
-        party="spd", blocks=blocks, chunk_size=500, overlap=100, tokenize=_whitespace_tokens
+def test_chunker_uses_first_page_of_section():
+    doc = _multipage_doc(
+        [
+            ("# Wirtschaft\n\nBody line one.", 5),
+            ("Body line two.", 6),
+        ]
     )
+    chunks = chunk_document(doc)
 
     assert len(chunks) == 1
     assert chunks[0].page == 5
 
 
 def test_chunker_rejects_invalid_overlap():
+    doc = _doc("# H\n\nbody")
     with pytest.raises(ValueError):
-        chunk_document(
-            party="spd",
-            blocks=[_block("H", 1), _block("body", 0)],
-            chunk_size=50,
-            overlap=50,
-            tokenize=_whitespace_tokens,
-        )
+        chunk_document(doc, chunk_size=50, overlap=50)
+
+
+# ─── ID schema ──────────────────────────────────────────────────────────────
+
+
+def test_chunker_ids_are_deterministic():
+    doc = _doc("# H\n\n" + " ".join(f"w{i}" for i in range(200)))
+    chunks1 = chunk_document(doc, chunk_size=50, overlap=10)
+    chunks2 = chunk_document(doc, chunk_size=50, overlap=10)
+
+    assert [c.chunk_id for c in chunks1] == [c.chunk_id for c in chunks2]
+
+
+def test_chunker_ids_follow_page_local_counter():
+    doc = _multipage_doc(
+        [
+            ("# Wirtschaft\n\n## Steuerpolitik\n\nBody A.\n\n## Arbeitsmarkt\n\nBody B.", 2),
+            ("## Bildung\n\nBody C.", 3),
+        ]
+    )
+    chunks = chunk_document(doc)
+
+    page2_ids = [c.chunk_id for c in chunks if c.page == 2]
+    page3_ids = [c.chunk_id for c in chunks if c.page == 3]
+    assert page2_ids == ["spd_p2_c0", "spd_p2_c1"]
+    assert page3_ids == ["spd_p3_c0"]
+
+
+# ─── table integrity ────────────────────────────────────────────────────────
+
+
+def test_chunker_does_not_split_inside_table():
+    table_rows = "\n".join(f"| Partei | Position {i} |" for i in range(20))
+    separator = "| --- | --- |"
+    table = f"| Partei | Position |\n{separator}\n{table_rows}"
+    doc = _doc(f"# Wirtschaft\n\n{table}")
+
+    chunks = chunk_document(doc, chunk_size=20, overlap=5)
+
+    for c in chunks:
+        lines = c.text.splitlines()
+        # A separator row without a preceding header row indicates a mid-table split.
+        # After splitting, the first line of a chunk should never be a separator.
+        if lines:
+            assert not (
+                lines[0].startswith("|") and "---" in lines[0]
+            ), f"Chunk starts with table separator (orphaned): {lines[0]!r}"
