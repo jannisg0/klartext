@@ -44,6 +44,8 @@ _RERANK_PROMPT = (
 
 # mlx-lm and Ollama may return the token with a leading space-marker.
 _JA_TOKENS = frozenset({"ja", "yes", "▁ja", "▁yes"})
+# "Ne" is the prefix token Gemma uses before completing "Nein".
+_NEIN_TOKENS = frozenset({"nein", "no", "ne", "▁nein", "▁no", "▁ne"})
 
 
 @dataclass
@@ -99,7 +101,17 @@ class LogProbReranker:
         choice = response.choices[0]
         if not choice.logprobs or not choice.logprobs.content:
             return 0.0
+
+        # Normalize over Ja/Nein probability mass so thinking-mode tokens
+        # (e.g. Gemma's <|channel|>) don't dilute the score.
+        p_ja = 0.0
+        p_nein = 0.0
         for token_lp in choice.logprobs.content[0].top_logprobs:
-            if token_lp.token.strip().lower() in _JA_TOKENS:
-                return math.exp(token_lp.logprob)
-        return 0.0
+            tok = token_lp.token.strip().lower()
+            if tok in _JA_TOKENS:
+                p_ja = math.exp(token_lp.logprob)
+            elif tok in _NEIN_TOKENS:
+                p_nein = math.exp(token_lp.logprob)
+
+        denom = p_ja + p_nein
+        return p_ja / denom if denom > 0 else 0.0
