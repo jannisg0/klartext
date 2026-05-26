@@ -14,10 +14,14 @@ stack and is what ``uv run python scripts/ingest.py`` calls.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from chromadb import Collection
 
 import structlog
 
@@ -31,17 +35,6 @@ log = structlog.get_logger(__name__)
 
 class Embedder(Protocol):
     def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
-
-
-class ChromaCollection(Protocol):
-    def add(
-        self,
-        *,
-        ids: Sequence[str],
-        embeddings: Sequence[Sequence[float]],
-        metadatas: Sequence[dict],
-        documents: Sequence[str],
-    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -83,13 +76,19 @@ def ingest_manifestos(
     manifestos_dir: Path,
     enricher: ContextEnricher,
     embedder: Embedder,
-    collection: ChromaCollection,
+    collection: Collection,
     bm25_path: Path,
     chunk_size: int = 500,
     overlap: int = 100,
 ) -> IngestReport:
     manifestos_dir = Path(manifestos_dir)
     pdfs = sorted(manifestos_dir.glob("*.pdf"))
+    log.info("ingest.manifestos.scan", pdf_count=len(pdfs), pdfs=[p.name for p in pdfs])
+
+    if not pdfs:
+        log.warning("ingest.no_pdfs", dir=str(manifestos_dir))
+        return IngestReport(parties=[], chunks_total=0, bm25_path=None)
+
     parties: list[str] = []
     all_enriched: list[EnrichedChunk] = []
     source_by_id: dict[str, Path] = {}
@@ -97,35 +96,87 @@ def ingest_manifestos(
     for pdf in pdfs:
         party = party_from_pdf_path(pdf)
         parties.append(party)
-        chunks = process_pdf(pdf, party=party, chunk_size=chunk_size, overlap=overlap)
+        file_mb = pdf.stat().st_size / 1_048_576
+
+        log.info("ingest.pdf.parse.start", party=party, file=pdf.name, size_mb=round(file_mb, 2))
+        t0 = time.monotonic()
+        doc = parse_pdf(pdf, party=party)
+        parse_s = time.monotonic() - t0
+        log.info(
+            "ingest.pdf.parse.done",
+            party=party,
+            pages=len(doc.pages),
+            elapsed_s=round(parse_s, 2),
+        )
+
+        chunks = chunk_document(doc, chunk_size=chunk_size, overlap=overlap)
+        log.info(
+            "ingest.pdf.chunk.done",
+            party=party,
+            chunks=len(chunks),
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
+
+        log.info("ingest.pdf.enrich.start", party=party, chunks=len(chunks))
+        t0 = time.monotonic()
         enriched = enricher.enrich_batch(chunks)
+        enrich_s = time.monotonic() - t0
+        log.info(
+            "ingest.pdf.enrich.done",
+            party=party,
+            enriched=len(enriched),
+            elapsed_s=round(enrich_s, 2),
+            per_chunk_s=round(enrich_s / len(enriched), 2) if enriched else 0,
+        )
+
         all_enriched.extend(enriched)
         for e in enriched:
             source_by_id[e.chunk_id] = pdf
-        log.info("ingest.pdf.processed", party=party, chunks=len(chunks))
 
     if not all_enriched:
         log.warning("ingest.no_chunks", dir=str(manifestos_dir))
         return IngestReport(parties=parties, chunks_total=0, bm25_path=None)
 
+    log.info("ingest.embed.start", total_chunks=len(all_enriched))
+    t0 = time.monotonic()
     texts = [e.text for e in all_enriched]
     embeddings = embedder.embed(texts)
+    embed_s = time.monotonic() - t0
+    log.info(
+        "ingest.embed.done",
+        total_chunks=len(all_enriched),
+        dims=len(embeddings[0]) if embeddings else 0,
+        elapsed_s=round(embed_s, 2),
+    )
+
+    log.info("ingest.chromadb.write.start", chunks=len(all_enriched))
+    t0 = time.monotonic()
     collection.add(
         ids=[e.chunk_id for e in all_enriched],
         embeddings=embeddings,
         metadatas=[_metadata(e, source_by_id[e.chunk_id]) for e in all_enriched],
         documents=texts,
     )
+    log.info(
+        "ingest.chromadb.write.done",
+        chunks=len(all_enriched),
+        elapsed_s=round(time.monotonic() - t0, 2),
+    )
 
+    log.info("ingest.bm25.build.start", chunks=len(all_enriched))
+    t0 = time.monotonic()
     bm25 = Bm25Index.build({e.chunk_id: e.text for e in all_enriched})
     bm25.save(bm25_path)
     log.info(
-        "ingest.manifestos.complete",
-        chunks=len(all_enriched),
-        parties=parties,
-        bm25=str(bm25_path),
+        "ingest.bm25.build.done", path=str(bm25_path), elapsed_s=round(time.monotonic() - t0, 2)
     )
 
+    log.info(
+        "ingest.manifestos.complete",
+        parties=parties,
+        chunks_total=len(all_enriched),
+    )
     return IngestReport(parties=parties, chunks_total=len(all_enriched), bm25_path=bm25_path)
 
 
@@ -133,15 +184,18 @@ def ingest_tweets(
     *,
     tweets_dir: Path,
     embedder: Embedder,
-    collection: ChromaCollection,
+    collection: Collection,
 ) -> int:
     tweets_dir = Path(tweets_dir)
+    json_files = [p for p in sorted(tweets_dir.glob("*.json")) if not p.name.startswith("_")]
+    log.info("ingest.tweets.scan", file_count=len(json_files))
+
     items: list[tuple[str, str, dict]] = []
-    for path in sorted(tweets_dir.glob("*.json")):
-        if path.name.startswith("_"):
-            continue
+    for path in json_files:
         data = json.loads(path.read_text(encoding="utf-8"))
         politician = data["politician"]
+        tweet_count = len(data.get("tweets", []))
+        log.info("ingest.tweets.file", politician=politician, tweets=tweet_count, file=path.name)
         for idx, tweet in enumerate(data.get("tweets", [])):
             tweet_id = f"{politician}_{idx}"
             text = tweet["text"]
@@ -156,16 +210,23 @@ def ingest_tweets(
             items.append((tweet_id, text, meta))
 
     if not items:
+        log.info("ingest.tweets.skip", reason="no items found")
         return 0
 
+    log.info("ingest.tweets.embed.start", total=len(items))
+    t0 = time.monotonic()
     embeddings = embedder.embed([t for _, t, _ in items])
+    log.info(
+        "ingest.tweets.embed.done", total=len(items), elapsed_s=round(time.monotonic() - t0, 2)
+    )
+
     collection.add(
         ids=[i for i, _, _ in items],
         embeddings=embeddings,
         metadatas=[m for _, _, m in items],
         documents=[t for _, t, _ in items],
     )
-    log.info("ingest.tweets.complete", count=len(items))
+    log.info("ingest.tweets.done", count=len(items))
     return len(items)
 
 
@@ -219,16 +280,39 @@ def main() -> None:
     from mlx_embeddings import load as mlx_emb_load
 
     emb_model_id = os.getenv("EMBEDDING_MODEL_MLX", "mlx-community/bge-m3-mlx-8bit")
+    log.info("ingest.embedder.load.start", model=emb_model_id)
+    t0 = time.monotonic()
     emb_model, emb_tokenizer = mlx_emb_load(emb_model_id)
+    log.info(
+        "ingest.embedder.load.done", model=emb_model_id, elapsed_s=round(time.monotonic() - t0, 2)
+    )
 
     class BgeEmbedder:
-        def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        def embed(self, texts: Sequence[str], batch_size: int = 32) -> list[list[float]]:
             import numpy as _np
 
-            out = mlx_emb_generate(emb_model, emb_tokenizer, texts=list(texts))
-            return _np.array(out.text_embeds).tolist()
+            text_list = list(texts)
+            all_batches = []
+            n_batches = (len(text_list) + batch_size - 1) // batch_size
+            for idx, i in enumerate(range(0, len(text_list), batch_size)):
+                batch = text_list[i : i + batch_size]
+                log.debug(
+                    "ingest.embed.batch",
+                    batch=idx + 1,
+                    of=n_batches,
+                    size=len(batch),
+                )
+                out = mlx_emb_generate(emb_model, emb_tokenizer, texts=batch)
+                all_batches.append(_np.array(out.text_embeds))  # type: ignore[attr-defined]
+            return _np.concatenate(all_batches, axis=0).tolist()
 
     enrichment_enabled = os.getenv("CONTEXTUAL_ENRICHMENT_ENABLED", "true").lower() == "true"
+    log.info(
+        "ingest.config",
+        llm_backend=os.getenv("LLM_BACKEND", "mlx"),
+        enrichment=enrichment_enabled,
+        chromadb_path=str(chromadb_path),
+    )
     enricher = ContextEnricher(
         llm=helper_llm,
         cache_path=chromadb_path / "enrichment_cache.json",
@@ -240,7 +324,9 @@ def main() -> None:
     tweets_coll = chroma_client.get_or_create_collection("klartext_tweets")
 
     embedder = BgeEmbedder()
-    log.info("ingest.start", manifestos_dir=str(manifestos_dir))
+
+    t_total = time.monotonic()
+    log.info("ingest.start", manifestos_dir=str(manifestos_dir), tweets_dir=str(tweets_dir))
 
     report = ingest_manifestos(
         manifestos_dir=manifestos_dir,
@@ -249,10 +335,16 @@ def main() -> None:
         collection=manifestos_coll,
         bm25_path=bm25_path,
     )
-    log.info("ingest.manifestos.done", chunks=report.chunks_total)
 
     n_tweets = ingest_tweets(tweets_dir=tweets_dir, embedder=embedder, collection=tweets_coll)
-    log.info("ingest.tweets.done", count=n_tweets)
+
+    log.info(
+        "ingest.done",
+        manifesto_chunks=report.chunks_total,
+        parties=report.parties,
+        tweets=n_tweets,
+        total_elapsed_s=round(time.monotonic() - t_total, 2),
+    )
 
 
 if __name__ == "__main__":
