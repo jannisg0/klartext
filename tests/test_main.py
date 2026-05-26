@@ -11,10 +11,11 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from openai.resources.chat.completions import Completions
 
 from backend.config import Settings
 from backend.llm import GenerationConfig, OpenAILLM
@@ -60,8 +61,10 @@ class _FakeEmbedder:
 
 
 def _logprob_response(prob: float) -> Any:
-    lp = SimpleNamespace(token="Ja", logprob=math.log(max(prob, 1e-9)))
-    content_item = SimpleNamespace(top_logprobs=[lp])
+    # Include complementary Nein token so normalized score == prob.
+    ja = SimpleNamespace(token="Ja", logprob=math.log(max(prob, 1e-9)))
+    nein = SimpleNamespace(token="Nein", logprob=math.log(max(1.0 - prob, 1e-9)))
+    content_item = SimpleNamespace(top_logprobs=[ja, nein])
     return SimpleNamespace(
         choices=[SimpleNamespace(logprobs=SimpleNamespace(content=[content_item]))]
     )
@@ -135,8 +138,10 @@ def _build_services(
         score_map=score_map or {},
     )
     cfg = GenerationConfig(model="test-model")
-    llm = OpenAILLM(completions=fake, config=cfg)
-    reranker = LogProbReranker(completions=fake, model="test-model", threshold=threshold)
+    llm = OpenAILLM(completions=cast(Completions, fake), config=cfg)
+    reranker = LogProbReranker(
+        completions=cast(Completions, fake), model="test-model", threshold=threshold
+    )
 
     return Services(
         settings=settings,

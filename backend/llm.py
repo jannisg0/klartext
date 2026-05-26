@@ -13,9 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING
 
 from backend.prompt_builder import Message
+
+if TYPE_CHECKING:
+    from openai.resources.chat.completions import Completions
 
 
 @dataclass(frozen=True)
@@ -29,26 +32,11 @@ class GenerationConfig:
             raise ValueError("GenerationConfig.model must not be empty")
 
 
-class ChatCompletionAPI(Protocol):
-    """Subset of ``openai.resources.chat.completions.Completions`` we use."""
-
-    def create(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, str]],
-        stream: bool,
-        max_tokens: int,
-        temperature: float,
-        **kwargs: Any,
-    ) -> Any: ...
-
-
 @dataclass
 class OpenAILLM:
     """LLM wrapper around an OpenAI-compatible Chat Completions endpoint."""
 
-    completions: ChatCompletionAPI
+    completions: Completions
     config: GenerationConfig
 
     def chat_stream(self, messages: Sequence[Message]) -> Iterator[str]:

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from openai.resources.chat.completions import Completions
 
 from backend.llm import GenerationConfig, OpenAILLM
 from backend.prompt_builder import Message
@@ -45,7 +46,7 @@ class _FakeCompletions:
 
 def _build(completions: _FakeCompletions, **cfg_kwargs) -> OpenAILLM:
     config = GenerationConfig(model=cfg_kwargs.pop("model", "test-model"), **cfg_kwargs)
-    return OpenAILLM(completions=completions, config=config)
+    return OpenAILLM(completions=cast(Completions, completions), config=config)
 
 
 # ─── chat_stream ────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ def test_chat_stream_skips_none_and_empty_content():
             ]
 
     llm = OpenAILLM(
-        completions=_NullyCompletions(),
+        completions=cast(Completions, _NullyCompletions()),
         config=GenerationConfig(model="m"),
     )
     assert list(llm.chat_stream([Message(role="user", content="q")])) == ["hi"]
@@ -160,7 +161,9 @@ def test_generate_returns_empty_string_on_none_content():
         def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=None))])
 
-    llm = OpenAILLM(completions=_NoneContent(), config=GenerationConfig(model="m"))
+    llm = OpenAILLM(
+        completions=cast(Completions, _NoneContent()), config=GenerationConfig(model="m")
+    )
     assert llm.generate("prompt") == ""
 
 

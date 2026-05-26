@@ -11,7 +11,9 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
+from chromadb import Collection
 from scripts.ingest import ingest_manifestos, ingest_tweets, party_from_pdf_path
 from tests.conftest import PdfLine, build_pdf
 
@@ -82,7 +84,7 @@ def test_ingest_manifestos_empty_dir_produces_empty_report(tmp_path: Path):
         manifestos_dir=manifestos,
         enricher=ContextEnricher(llm=_FakeLLM(), cache_path=tmp_path / "cache.json", enabled=False),
         embedder=_FakeEmbedder(),
-        collection=_FakeCollection(),
+        collection=cast(Collection, _FakeCollection()),
         bm25_path=tmp_path / "bm25.pkl",
     )
 
@@ -100,14 +102,14 @@ def test_ingest_manifestos_indexes_two_pdfs(tmp_path: Path):
 
     llm = _FakeLLM()
     embedder = _FakeEmbedder()
-    collection = _FakeCollection()
+    fake_coll = _FakeCollection()
     bm25_path = tmp_path / "bm25.pkl"
 
     report = ingest_manifestos(
         manifestos_dir=manifestos,
         enricher=ContextEnricher(llm=llm, cache_path=tmp_path / "cache.json", enabled=True),
         embedder=embedder,
-        collection=collection,
+        collection=cast(Collection, fake_coll),
         bm25_path=bm25_path,
     )
 
@@ -116,16 +118,16 @@ def test_ingest_manifestos_indexes_two_pdfs(tmp_path: Path):
     assert bm25_path.exists()
 
     # Each id matches expected schema and is unique.
-    assert len(set(collection.ids)) == len(collection.ids)
-    for cid in collection.ids:
+    assert len(set(fake_coll.ids)) == len(fake_coll.ids)
+    for cid in fake_coll.ids:
         assert cid.startswith(("spd_", "cdu_"))
 
     # Documents passed to embedder include the enrichment context.
-    for doc in collection.documents:
+    for doc in fake_coll.documents:
         assert "Kontext-" in doc
 
     # Metadata carries the required fields per CLAUDE.md.
-    for meta in collection.metadatas:
+    for meta in fake_coll.metadatas:
         assert {"party", "section_path", "page", "chunk_id", "context"} <= meta.keys()
 
 
@@ -142,7 +144,7 @@ def test_ingest_manifestos_reuses_enrichment_cache(tmp_path: Path):
         manifestos_dir=manifestos,
         enricher=ContextEnricher(llm=llm1, cache_path=cache, enabled=True),
         embedder=_FakeEmbedder(),
-        collection=_FakeCollection(),
+        collection=cast(Collection, _FakeCollection()),
         bm25_path=tmp_path / "bm25.pkl",
     )
     first_calls = llm1.calls
@@ -152,7 +154,7 @@ def test_ingest_manifestos_reuses_enrichment_cache(tmp_path: Path):
         manifestos_dir=manifestos,
         enricher=ContextEnricher(llm=llm2, cache_path=cache, enabled=True),
         embedder=_FakeEmbedder(),
-        collection=_FakeCollection(),
+        collection=cast(Collection, _FakeCollection()),
         bm25_path=tmp_path / "bm25.pkl",
     )
 
@@ -176,11 +178,13 @@ def test_ingest_tweets_indexes_each_tweet_with_stable_id(tmp_path: Path):
     (tweets_dir / "_example.json").write_text(json.dumps(payload), encoding="utf-8")
 
     embedder = _FakeEmbedder()
-    collection = _FakeCollection()
+    fake_coll = _FakeCollection()
 
-    n = ingest_tweets(tweets_dir=tweets_dir, embedder=embedder, collection=collection)
+    n = ingest_tweets(
+        tweets_dir=tweets_dir, embedder=embedder, collection=cast(Collection, fake_coll)
+    )
 
     assert n == 2
-    assert collection.ids == ["annalena_baerbock_0", "annalena_baerbock_1"]
-    assert collection.metadatas[0]["party"] == "gruene"
-    assert collection.metadatas[0]["politician"] == "annalena_baerbock"
+    assert fake_coll.ids == ["annalena_baerbock_0", "annalena_baerbock_1"]
+    assert fake_coll.metadatas[0]["party"] == "gruene"
+    assert fake_coll.metadatas[0]["politician"] == "annalena_baerbock"

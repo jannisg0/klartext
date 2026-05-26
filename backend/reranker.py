@@ -12,28 +12,18 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING
 
 from backend.retriever import Hit
+
+if TYPE_CHECKING:
+    from openai.resources.chat.completions import Completions
 
 
 @dataclass(frozen=True)
 class RerankResult:
     hits: list[Hit]
     below_threshold: bool
-
-
-class ChatCompletionAPI(Protocol):
-    def create(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, str]],
-        stream: bool,
-        max_tokens: int,
-        temperature: float,
-        **kwargs: Any,
-    ) -> Any: ...
 
 
 _RERANK_PROMPT = (
@@ -52,7 +42,7 @@ _NEIN_TOKENS = frozenset({"nein", "no", "ne", "▁nein", "▁no", "▁ne"})
 class LogProbReranker:
     """Reranker that scores hits via log-probs from a chat completion API."""
 
-    completions: ChatCompletionAPI
+    completions: Completions
     model: str
     threshold: float = 0.3
 
