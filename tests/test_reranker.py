@@ -10,9 +10,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from openai.resources.chat.completions import Completions
 
 from backend.reranker import LogProbReranker, RerankResult
 from backend.retriever import Hit
@@ -28,9 +29,17 @@ def _hit(chunk_id: str, text: str = "body") -> Hit:
 
 
 def _logprob_response(token: str, logprob: float) -> Any:
-    """Build a SimpleNamespace mimicking an OpenAI non-streaming response with log-probs."""
-    token_lp = SimpleNamespace(token=token, logprob=logprob)
-    content_item = SimpleNamespace(top_logprobs=[token_lp])
+    """Build a SimpleNamespace mimicking an OpenAI non-streaming response with log-probs.
+
+    Includes a complementary Ja/Nein token so the normalized score equals
+    the input probability: score = p / (p + (1-p)) = p.
+    """
+    p = math.exp(logprob)
+    complement_token = "Nein" if token.strip().lower() in {"ja", "yes", "▁ja", "▁yes"} else "Ja"
+    complement_lp = math.log(max(1.0 - p, 1e-10))
+    primary = SimpleNamespace(token=token, logprob=logprob)
+    complement = SimpleNamespace(token=complement_token, logprob=complement_lp)
+    content_item = SimpleNamespace(top_logprobs=[primary, complement])
     return SimpleNamespace(
         choices=[
             SimpleNamespace(
@@ -67,6 +76,10 @@ def _ja_lp(prob: float) -> float:
     return math.log(prob)
 
 
+def _reranker(fake: _FakeCompletions, *, threshold: float = 0.0) -> LogProbReranker:
+    return LogProbReranker(completions=cast(Completions, fake), model="test", threshold=threshold)
+
+
 # ─── core ranking ────────────────────────────────────────────────────────────
 
 
@@ -78,7 +91,7 @@ def test_rerank_sorts_hits_by_ja_probability_descending():
             "high body": ("Ja", _ja_lp(0.9)),
         }
     )
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+    reranker = _reranker(fake)
 
     result = reranker.rerank(
         query="q",
@@ -106,7 +119,7 @@ def test_rerank_keeps_only_top_k():
             "e": ("Ja", _ja_lp(0.5)),
         }
     )
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+    reranker = _reranker(fake)
 
     result = reranker.rerank(
         query="q",
@@ -125,7 +138,7 @@ def test_rerank_signals_below_threshold_when_top_score_too_low():
             "b": ("Ja", _ja_lp(0.05)),
         }
     )
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
+    reranker = _reranker(fake, threshold=0.3)
 
     result = reranker.rerank(
         query="q",
@@ -145,7 +158,7 @@ def test_rerank_drops_individual_hits_below_threshold():
             "c": ("Ja", _ja_lp(0.4)),
         }
     )
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
+    reranker = _reranker(fake, threshold=0.3)
 
     result = reranker.rerank(
         query="q",
@@ -160,7 +173,7 @@ def test_rerank_drops_individual_hits_below_threshold():
 
 def test_rerank_empty_hits_returns_empty_not_below_threshold():
     fake = _FakeCompletions(score_map={})
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
+    reranker = _reranker(fake, threshold=0.3)
 
     result = reranker.rerank(query="q", hits=[], top_k=5)
 
@@ -169,7 +182,7 @@ def test_rerank_empty_hits_returns_empty_not_below_threshold():
 
 def test_rerank_preserves_metadata_on_rescored_hits():
     fake = _FakeCompletions(score_map={"body": ("Ja", _ja_lp(0.7))})
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+    reranker = _reranker(fake)
 
     hit = Hit(chunk_id="spd_p1_c0", score=0.0, text="body", metadata={"party": "spd", "page": 7})
     result = reranker.rerank(query="q", hits=[hit], top_k=1)
@@ -186,7 +199,9 @@ def test_score_returns_zero_when_no_logprobs_in_response():
         def create(self, **kwargs):
             return _no_logprobs_response()
 
-    reranker = LogProbReranker(completions=_NoLogprobs(), model="test", threshold=0.0)
+    reranker = LogProbReranker(
+        completions=cast(Completions, _NoLogprobs()), model="test", threshold=0.0
+    )
     result = reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
 
     # Score of 0.0 < threshold 0.0 is false (equal is not below), so hit stays.
@@ -196,7 +211,7 @@ def test_score_returns_zero_when_no_logprobs_in_response():
 def test_score_accepts_ja_with_space_marker():
     """Tokenizers may prepend a space-marker (▁) to the 'Ja' token."""
     fake = _FakeCompletions(score_map={"body": ("▁Ja", _ja_lp(0.8))})
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+    reranker = _reranker(fake)
 
     result = reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
 
@@ -205,7 +220,7 @@ def test_score_accepts_ja_with_space_marker():
 
 def test_score_passes_max_tokens_one_to_api():
     fake = _FakeCompletions(score_map={"body": ("Ja", _ja_lp(0.5))})
-    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+    reranker = _reranker(fake)
 
     reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
 
