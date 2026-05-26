@@ -17,7 +17,7 @@ export default function ErrorState() {
           {state.error ?? 'Unbekannter Fehler.'}
         </p>
         <p className="mt-2 text-[12px] text-bone3">
-          Prüfe, ob das Backend (uvicorn) auf <span className="font-mono">:8000</span>{' '}
+          Prüfe, ob das Backend (uvicorn) auf <span className="font-mono">:8001</span>{' '}
           läuft und Ollama erreichbar ist.
         </p>
 

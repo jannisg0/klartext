@@ -10,7 +10,7 @@ import { mockStream } from '../mocks/mockStream.js'
 //   otherwise      -> real POST /chat against the FastAPI backend
 //   VITE_USE_MOCKS=true (env) -> always mocks (overrides URL)
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://127.0.0.1:8000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://127.0.0.1:8001'
 const FORCE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 
 function readScenarioOverride() {

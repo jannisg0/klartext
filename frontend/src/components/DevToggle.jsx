@@ -30,7 +30,7 @@ export default function DevToggle() {
         className={`px-2 h-6 rounded ${
           realActive ? 'bg-bone text-graphite' : 'hover:bg-graphite3'
         }`}
-        title="Echtes Backend (POST :8000/chat)"
+        title="Echtes Backend (POST :8001/chat)"
       >
         real
       </button>

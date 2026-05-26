@@ -22,7 +22,7 @@ export const SCENARIOS = {
   error: [
     {
       event: 'error',
-      data: { message: 'Backend nicht erreichbar (mock). Prüfe ob uvicorn auf :8000 läuft.' },
+      data: { message: 'Backend nicht erreichbar (mock). Prüfe ob uvicorn auf :8001 läuft.' },
     },
   ],
 }
