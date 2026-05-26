@@ -22,6 +22,7 @@ dependencies = [
     "structlog>=24.4",
     "ragas>=0.2",
     "mlx-embeddings>=0.1.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "pymupdf4llm>=1.27.2.3",
 ]
 
 [dependency-groups]

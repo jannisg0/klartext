@@ -1,6 +1,6 @@
 """End-to-end ingestion pipeline.
 
-Manifestos:   PDF -> blocks -> headings -> chunks -> enriched -> embedded
+Manifestos:   PDF -> Markdown pages -> chunks -> enriched -> embedded
               -> ChromaDB (``klartext_manifestos``) + BM25 pickle.
 Tweets:       JSON -> embedded -> ChromaDB (``klartext_tweets``).
 
@@ -24,7 +24,7 @@ import structlog
 from backend.bm25_index import Bm25Index
 from backend.chunker import Chunk, chunk_document
 from backend.enricher import ContextEnricher, EnrichedChunk
-from backend.pdf_parser import classify_blocks, detect_heading_sizes, parse_pdf
+from backend.pdf_parser import parse_pdf
 
 log = structlog.get_logger(__name__)
 
@@ -64,11 +64,7 @@ def process_pdf(
 ) -> list[Chunk]:
     party = party or party_from_pdf_path(path)
     doc = parse_pdf(path, party=party)
-    if not doc.blocks:
-        return []
-    sizes = detect_heading_sizes(doc.blocks)
-    classified = classify_blocks(doc.blocks, sizes)
-    return chunk_document(party=party, blocks=classified, chunk_size=chunk_size, overlap=overlap)
+    return chunk_document(doc, chunk_size=chunk_size, overlap=overlap)
 
 
 def _metadata(chunk: EnrichedChunk, source_pdf: Path | str) -> dict:
