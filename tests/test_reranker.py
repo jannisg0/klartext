@@ -1,39 +1,84 @@
-"""Tests for the cross-encoder reranker.
+"""Tests for the log-probability reranker.
 
-The scorer is injected so we don't load bge-reranker-v2-m3 in tests.
+``LogProbReranker`` is tested by injecting a fake ``ChatCompletionAPI``
+that returns controlled log-prob responses without a real inference
+server.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import math
 from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import Any
 
-from backend.reranker import CrossEncoderReranker, RerankResult
+import pytest
+
+from backend.reranker import LogProbReranker, RerankResult
 from backend.retriever import Hit
 
 
 def _hit(chunk_id: str, text: str = "body") -> Hit:
     return Hit(
-        chunk_id=chunk_id, score=0.0, text=text, metadata={"party": chunk_id.split("_", 1)[0]}
+        chunk_id=chunk_id,
+        score=0.0,
+        text=text,
+        metadata={"party": chunk_id.split("_", 1)[0]},
     )
 
 
+def _logprob_response(token: str, logprob: float) -> Any:
+    """Build a SimpleNamespace mimicking an OpenAI non-streaming response with log-probs."""
+    token_lp = SimpleNamespace(token=token, logprob=logprob)
+    content_item = SimpleNamespace(top_logprobs=[token_lp])
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                logprobs=SimpleNamespace(content=[content_item]),
+            )
+        ]
+    )
+
+
+def _no_logprobs_response() -> Any:
+    return SimpleNamespace(choices=[SimpleNamespace(logprobs=None)])
+
+
 @dataclass
-class _FakeScorer:
-    """Scores pairs based on a lookup keyed by chunk text."""
+class _FakeCompletions:
+    """Maps chunk text → (token, logprob). Tracks all calls."""
 
-    scores: dict[str, float]
-    pairs_seen: list[tuple[str, str]] = field(default_factory=list)
+    score_map: dict[str, tuple[str, float]]
+    calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def score(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
-        pairs = list(pairs)
-        self.pairs_seen.extend(pairs)
-        return [self.scores.get(text, 0.0) for _, text in pairs]
+    def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
+        self.calls.append({"messages": messages, "max_tokens": max_tokens})
+        content = messages[-1]["content"]
+        # Match against the "Text: <chunk>" portion to avoid false substring hits
+        # from single-character texts that appear in the German prompt template.
+        for text, (token, lp) in self.score_map.items():
+            if f"Text: {text}" in content:
+                return _logprob_response(token, lp)
+        return _no_logprobs_response()
 
 
-def test_rerank_sorts_hits_by_score_descending():
-    scorer = _FakeScorer({"low body": 0.4, "mid body": 0.6, "high body": 0.9})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.0)
+def _ja_lp(prob: float) -> float:
+    """Convert probability to log-probability."""
+    return math.log(prob)
+
+
+# ─── core ranking ────────────────────────────────────────────────────────────
+
+
+def test_rerank_sorts_hits_by_ja_probability_descending():
+    fake = _FakeCompletions(
+        score_map={
+            "low body": ("Ja", _ja_lp(0.4)),
+            "mid body": ("Ja", _ja_lp(0.6)),
+            "high body": ("Ja", _ja_lp(0.9)),
+        }
+    )
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
 
     result = reranker.rerank(
         query="q",
@@ -47,13 +92,21 @@ def test_rerank_sorts_hits_by_score_descending():
 
     ids = [h.chunk_id for h in result.hits]
     assert ids == ["b_p1_c0", "c_p1_c0", "a_p1_c0"]
-    assert result.hits[0].score == 0.9
+    assert result.hits[0].score == pytest.approx(0.9, abs=1e-6)
     assert result.below_threshold is False
 
 
 def test_rerank_keeps_only_top_k():
-    scorer = _FakeScorer({"a": 0.9, "b": 0.8, "c": 0.7, "d": 0.6, "e": 0.5})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.0)
+    fake = _FakeCompletions(
+        score_map={
+            "a": ("Ja", _ja_lp(0.9)),
+            "b": ("Ja", _ja_lp(0.8)),
+            "c": ("Ja", _ja_lp(0.7)),
+            "d": ("Ja", _ja_lp(0.6)),
+            "e": ("Ja", _ja_lp(0.5)),
+        }
+    )
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
 
     result = reranker.rerank(
         query="q",
@@ -65,9 +118,14 @@ def test_rerank_keeps_only_top_k():
     assert [h.chunk_id for h in result.hits] == ["x_p1_c0", "x_p1_c1", "x_p1_c2"]
 
 
-def test_rerank_signals_below_threshold_when_top_too_low():
-    scorer = _FakeScorer({"a": 0.1, "b": 0.05})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.3)
+def test_rerank_signals_below_threshold_when_top_score_too_low():
+    fake = _FakeCompletions(
+        score_map={
+            "a": ("Ja", _ja_lp(0.1)),
+            "b": ("Ja", _ja_lp(0.05)),
+        }
+    )
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
 
     result = reranker.rerank(
         query="q",
@@ -80,8 +138,14 @@ def test_rerank_signals_below_threshold_when_top_too_low():
 
 
 def test_rerank_drops_individual_hits_below_threshold():
-    scorer = _FakeScorer({"a": 0.9, "b": 0.2, "c": 0.4})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.3)
+    fake = _FakeCompletions(
+        score_map={
+            "a": ("Ja", _ja_lp(0.9)),
+            "b": ("Ja", _ja_lp(0.2)),
+            "c": ("Ja", _ja_lp(0.4)),
+        }
+    )
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
 
     result = reranker.rerank(
         query="q",
@@ -95,33 +159,65 @@ def test_rerank_drops_individual_hits_below_threshold():
 
 
 def test_rerank_empty_hits_returns_empty_not_below_threshold():
-    scorer = _FakeScorer({})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.3)
+    fake = _FakeCompletions(score_map={})
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.3)
 
     result = reranker.rerank(query="q", hits=[], top_k=5)
 
     assert result == RerankResult(hits=[], below_threshold=False)
 
 
-def test_rerank_passes_query_text_pairs_to_scorer():
-    scorer = _FakeScorer({"body1": 0.5, "body2": 0.6})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.0)
-
-    reranker.rerank(
-        query="my query",
-        hits=[_hit("a_p1_c0", "body1"), _hit("b_p1_c0", "body2")],
-        top_k=2,
-    )
-
-    assert scorer.pairs_seen == [("my query", "body1"), ("my query", "body2")]
-
-
-def test_rerank_preserves_metadata_on_rewrap():
-    scorer = _FakeScorer({"body": 0.7})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=0.0)
+def test_rerank_preserves_metadata_on_rescored_hits():
+    fake = _FakeCompletions(score_map={"body": ("Ja", _ja_lp(0.7))})
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
 
     hit = Hit(chunk_id="spd_p1_c0", score=0.0, text="body", metadata={"party": "spd", "page": 7})
     result = reranker.rerank(query="q", hits=[hit], top_k=1)
 
     assert result.hits[0].metadata == {"party": "spd", "page": 7}
-    assert result.hits[0].score == 0.7
+    assert result.hits[0].score == pytest.approx(0.7, abs=1e-6)
+
+
+# ─── log-prob extraction ─────────────────────────────────────────────────────
+
+
+def test_score_returns_zero_when_no_logprobs_in_response():
+    class _NoLogprobs:
+        def create(self, **kwargs):
+            return _no_logprobs_response()
+
+    reranker = LogProbReranker(completions=_NoLogprobs(), model="test", threshold=0.0)
+    result = reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
+
+    # Score of 0.0 < threshold 0.0 is false (equal is not below), so hit stays.
+    assert result.hits[0].score == pytest.approx(0.0)
+
+
+def test_score_accepts_ja_with_space_marker():
+    """Tokenizers may prepend a space-marker (▁) to the 'Ja' token."""
+    fake = _FakeCompletions(score_map={"body": ("▁Ja", _ja_lp(0.8))})
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+
+    result = reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
+
+    assert result.hits[0].score == pytest.approx(0.8, abs=1e-6)
+
+
+def test_score_passes_max_tokens_one_to_api():
+    fake = _FakeCompletions(score_map={"body": ("Ja", _ja_lp(0.5))})
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+
+    reranker.rerank(query="q", hits=[_hit("a_p1_c0", "body")], top_k=1)
+
+    assert all(c["max_tokens"] == 1 for c in fake.calls)
+
+
+def test_score_includes_query_and_chunk_text_in_prompt():
+    fake = _FakeCompletions(score_map={"chunk text": ("Ja", _ja_lp(0.6))})
+    reranker = LogProbReranker(completions=fake, model="test", threshold=0.0)
+
+    reranker.rerank(query="my question", hits=[_hit("a_p1_c0", "chunk text")], top_k=1)
+
+    prompt = fake.calls[0]["messages"][-1]["content"]
+    assert "Frage: my question" in prompt
+    assert "Text: chunk text" in prompt

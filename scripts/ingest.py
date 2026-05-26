@@ -6,9 +6,9 @@ Tweets:       JSON -> embedded -> ChromaDB (``klartext_tweets``).
 
 The orchestration functions take the LLM, embedder, and collection as
 arguments so they can be exercised in unit tests with fakes. ``main()``
-wires up the real LLM (MLX by default, Ollama via ``LLM_BACKEND``) +
-BGE-M3 + ChromaDB stack and is what ``uv run python scripts/ingest.py``
-calls.
+wires up the real LLM (mlx-lm server via OpenAI SDK by default, Ollama
+OpenAI gateway via ``LLM_BACKEND=ollama``) + mlx-embeddings + ChromaDB
+stack and is what ``uv run python scripts/ingest.py`` calls.
 """
 
 from __future__ import annotations
@@ -170,58 +170,39 @@ def ingest_tweets(
 
 
 def _build_helper_llm():
-    """Build the helper LLM (MLX by default, Ollama via ``LLM_BACKEND=ollama``).
+    """Build the helper LLM (mlx-lm server by default, Ollama via ``LLM_BACKEND=ollama``).
 
-    The enricher only needs ``generate(prompt) -> str``; both backends
-    satisfy that contract.
+    Both backends are reached via the OpenAI SDK.  The enricher only
+    needs ``generate(prompt) -> str``, which ``OpenAILLM`` satisfies.
     """
     import os
 
+    from openai import OpenAI
+
+    from backend.llm import GenerationConfig, OpenAILLM
+
     backend = os.getenv("LLM_BACKEND", "mlx").lower()
-    if backend == "ollama":
-        import ollama as ollama_lib
-
-        ollama_client = ollama_lib.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
-        helper_model = os.getenv("OLLAMA_MODEL_HELPER", "qwen3:4b")
-
-        class _OllamaHelper:
-            def generate(self, prompt: str) -> str:
-                res = ollama_client.generate(model=helper_model, prompt=prompt, stream=False)
-                return res["response"]
-
-        return _OllamaHelper()
-
-    from mlx_lm import generate as mlx_generate
-    from mlx_lm import load as mlx_load
-
-    model_id = os.getenv("MLX_MODEL_LLM", "mlx-community/gemma-4-e4b-it-OptiQ-4bit")
     max_tokens = int(os.getenv("MLX_MAX_TOKENS", "1024"))
-    mlx_model, mlx_tokenizer = mlx_load(model_id)
 
-    class _MlxHelper:
-        def generate(self, prompt: str) -> str:
-            text_prompt = mlx_tokenizer.apply_chat_template(
-                [{"role": "user", "content": prompt}],
-                add_generation_prompt=True,
-                tokenize=False,
-            )
-            return mlx_generate(
-                mlx_model,
-                mlx_tokenizer,
-                prompt=text_prompt,
-                max_tokens=max_tokens,
-                verbose=False,
-            )
+    if backend == "ollama":
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        helper_model = os.getenv("OLLAMA_MODEL_HELPER", "qwen3:4b")
+        client = OpenAI(base_url=ollama_host.rstrip("/") + "/v1", api_key="not-needed")
+        cfg = GenerationConfig(model=helper_model, num_ctx=max_tokens)
+        return OpenAILLM(completions=client.chat.completions, config=cfg)
 
-    return _MlxHelper()
+    omlx_base_url = os.getenv("OMLX_BASE_URL", "http://localhost:8000/v1")
+    omlx_model = os.getenv("OMLX_MODEL", "mlx-community/gemma-4-e4b-it-OptiQ-4bit")
+    client = OpenAI(base_url=omlx_base_url, api_key="not-needed")
+    cfg = GenerationConfig(model=omlx_model, num_ctx=max_tokens)
+    return OpenAILLM(completions=client.chat.completions, config=cfg)
 
 
 def main() -> None:
-    """CLI entry. Wires up the helper LLM + BGE-M3 + ChromaDB from env."""
+    """CLI entry. Wires up the helper LLM + mlx-embeddings + ChromaDB from env."""
     import os
 
     from dotenv import load_dotenv
-    from FlagEmbedding import BGEM3FlagModel
 
     import chromadb
 
@@ -234,22 +215,18 @@ def main() -> None:
 
     helper_llm = _build_helper_llm()
 
-    class BgeEmbedder:
-        def __init__(self) -> None:
-            self.model = BGEM3FlagModel(
-                os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
-                use_fp16=False,
-                device=os.getenv("EMBEDDING_DEVICE", "mps"),
-            )
+    from mlx_embeddings import generate as mlx_emb_generate
+    from mlx_embeddings import load as mlx_emb_load
 
+    emb_model_id = os.getenv("EMBEDDING_MODEL_MLX", "mlx-community/bge-m3-mlx-8bit")
+    emb_model, emb_tokenizer = mlx_emb_load(emb_model_id)
+
+    class BgeEmbedder:
         def embed(self, texts: Sequence[str]) -> list[list[float]]:
-            out = self.model.encode(
-                list(texts),
-                return_dense=True,
-                return_sparse=False,
-                return_colbert_vecs=False,
-            )
-            return out["dense_vecs"].tolist()
+            import numpy as _np
+
+            out = mlx_emb_generate(emb_model, emb_tokenizer, texts=list(texts))
+            return _np.array(out.text_embeds).tolist()
 
     enrichment_enabled = os.getenv("CONTEXTUAL_ENRICHMENT_ENABLED", "true").lower() == "true"
     enricher = ContextEnricher(

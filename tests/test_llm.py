@@ -1,83 +1,68 @@
-"""Tests for the MLX LLM wrapper.
+"""Tests for the OpenAI-compatible LLM wrapper.
 
-The MLX runtime is injected behind a Protocol so tests don't need
-``mlx_lm`` installed (it ships darwin-arm64 only).
+``OpenAILLM`` is tested by injecting a fake ``ChatCompletionAPI`` so no
+real inference server is needed.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from backend.llm import GenerationConfig, MlxLLM
+from backend.llm import GenerationConfig, OpenAILLM
 from backend.prompt_builder import Message
 
 
-class _FakeTokenizer:
-    def __init__(self) -> None:
-        self.calls: list[list[dict[str, str]]] = []
+def _ns(content: str) -> Any:
+    """Build a SimpleNamespace that mimics a streaming chunk's delta."""
+    return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content))])
 
-    def apply_chat_template(self, messages, *, add_generation_prompt: bool, tokenize: bool) -> str:
-        assert add_generation_prompt is True
-        assert tokenize is False
-        self.calls.append(list(messages))
-        return "\n".join(f"{m['role']}:{m['content']}" for m in messages) + "\nassistant:"
+
+def _ns_non_stream(content: str) -> Any:
+    """Build a SimpleNamespace mimicking a non-streaming completion response."""
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
 @dataclass
-class _FakeMlxRuntime:
-    """Minimal stand-in for ``mlx_lm.stream_generate`` / ``mlx_lm.generate``."""
+class _FakeCompletions:
+    """Fake ChatCompletionAPI — records calls and returns configured responses."""
 
-    chat_chunks: list[str] = field(default_factory=list)
+    stream_chunks: list[str] = field(default_factory=list)
     generate_response: str = ""
-    stream_calls: list[dict[str, Any]] = field(default_factory=list)
-    generate_calls: list[dict[str, Any]] = field(default_factory=list)
+    calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def stream_generate(
-        self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int
-    ) -> Iterator[Any]:
-        self.stream_calls.append({"prompt": prompt, "max_tokens": max_tokens})
-        for token in self.chat_chunks:
-            yield SimpleNamespace(text=token)
-
-    def generate(self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int) -> str:
-        self.generate_calls.append({"prompt": prompt, "max_tokens": max_tokens})
-        return self.generate_response
+    def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
+        self.calls.append(
+            {"model": model, "messages": messages, "stream": stream, "max_tokens": max_tokens}
+        )
+        if stream:
+            return [_ns(t) for t in self.stream_chunks]
+        return _ns_non_stream(self.generate_response)
 
 
-_FAKE_MODEL = object()
+def _build(completions: _FakeCompletions, **cfg_kwargs) -> OpenAILLM:
+    config = GenerationConfig(model=cfg_kwargs.pop("model", "test-model"), **cfg_kwargs)
+    return OpenAILLM(completions=completions, config=config)
 
 
-def _build(runtime: _FakeMlxRuntime, **cfg_kwargs) -> tuple[MlxLLM, _FakeTokenizer]:
-    tokenizer = _FakeTokenizer()
-    config = GenerationConfig(model=cfg_kwargs.pop("model", "mlx-community/test"), **cfg_kwargs)
-    llm = MlxLLM(model=_FAKE_MODEL, tokenizer=tokenizer, runtime=runtime, config=config)
-    return llm, tokenizer
+# ─── chat_stream ────────────────────────────────────────────────────────────
 
 
 def test_chat_stream_yields_token_strings():
-    runtime = _FakeMlxRuntime(chat_chunks=["Hallo ", "Welt", "."])
-    llm, _ = _build(runtime)
+    fake = _FakeCompletions(stream_chunks=["Hallo ", "Welt", "."])
+    llm = _build(fake)
 
-    tokens = list(
-        llm.chat_stream(
-            [
-                Message(role="system", content="sys"),
-                Message(role="user", content="hi"),
-            ]
-        )
-    )
+    tokens = list(llm.chat_stream([Message(role="user", content="hi")]))
 
     assert tokens == ["Hallo ", "Welt", "."]
 
 
-def test_chat_stream_applies_chat_template_with_role_payload():
-    runtime = _FakeMlxRuntime(chat_chunks=["x"])
-    llm, tokenizer = _build(runtime)
+def test_chat_stream_passes_all_messages():
+    fake = _FakeCompletions(stream_chunks=["x"])
+    llm = _build(fake)
 
     list(
         llm.chat_stream(
@@ -85,78 +70,109 @@ def test_chat_stream_applies_chat_template_with_role_payload():
         )
     )
 
-    assert tokenizer.calls == [
-        [
-            {"role": "system", "content": "rules"},
-            {"role": "user", "content": "q"},
-        ]
-    ]
-    assert runtime.stream_calls[0]["prompt"].startswith("system:rules\nuser:q")
+    sent = fake.calls[0]["messages"]
+    assert sent == [{"role": "system", "content": "rules"}, {"role": "user", "content": "q"}]
 
 
-def test_chat_stream_forwards_max_tokens_from_config():
-    runtime = _FakeMlxRuntime(chat_chunks=["x"])
-    llm, _ = _build(runtime, num_ctx=4096)
+def test_chat_stream_uses_model_from_config():
+    fake = _FakeCompletions(stream_chunks=["x"])
+    llm = _build(fake, model="mlx-community/gemma-4-e4b-it-OptiQ-4bit")
 
     list(llm.chat_stream([Message(role="user", content="q")]))
 
-    assert runtime.stream_calls[0]["max_tokens"] == 4096
+    assert fake.calls[0]["model"] == "mlx-community/gemma-4-e4b-it-OptiQ-4bit"
 
 
-def test_generate_wraps_prompt_in_user_message_and_returns_text():
-    runtime = _FakeMlxRuntime(generate_response="One sentence here.")
-    llm, tokenizer = _build(runtime)
+def test_chat_stream_forwards_num_ctx_as_max_tokens():
+    fake = _FakeCompletions(stream_chunks=["x"])
+    llm = _build(fake, num_ctx=4096)
 
-    out = llm.generate("Write one sentence.")
+    list(llm.chat_stream([Message(role="user", content="q")]))
 
-    assert out == "One sentence here."
-    assert tokenizer.calls == [[{"role": "user", "content": "Write one sentence."}]]
-    assert runtime.generate_calls[0]["prompt"].startswith("user:Write one sentence.")
+    assert fake.calls[0]["max_tokens"] == 4096
 
 
-def test_chat_stream_empty_chunks_produces_empty_iteration():
-    runtime = _FakeMlxRuntime(chat_chunks=[])
-    llm, _ = _build(runtime)
+def test_chat_stream_passes_stream_true():
+    fake = _FakeCompletions(stream_chunks=["x"])
+    llm = _build(fake)
 
-    tokens = list(llm.chat_stream([Message(role="user", content="q")]))
+    list(llm.chat_stream([Message(role="user", content="q")]))
 
-    assert tokens == []
-
-
-def test_chat_stream_skips_empty_token_payloads():
-    runtime = _FakeMlxRuntime(chat_chunks=["", "hi", ""])
-    llm, _ = _build(runtime)
-
-    tokens = list(llm.chat_stream([Message(role="user", content="q")]))
-
-    assert tokens == ["hi"]
+    assert fake.calls[0]["stream"] is True
 
 
-def test_chat_stream_accepts_plain_string_responses():
-    """Some MLX wrappers yield raw strings rather than ``GenerationResponse``."""
+def test_chat_stream_empty_produces_empty_iteration():
+    fake = _FakeCompletions(stream_chunks=[])
+    llm = _build(fake)
+
+    assert list(llm.chat_stream([Message(role="user", content="q")])) == []
+
+
+def test_chat_stream_skips_none_and_empty_content():
+    """Chunks with None or empty delta.content are silently dropped."""
 
     @dataclass
-    class _StringRuntime:
-        chunks: list[str]
+    class _NullyCompletions:
+        def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
+            return [
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=""))]),
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="hi"))]),
+            ]
 
-        def stream_generate(self, *, model, tokenizer, prompt, max_tokens):
-            yield from self.chunks
-
-        def generate(self, *, model, tokenizer, prompt, max_tokens):  # pragma: no cover
-            return ""
-
-    runtime = _StringRuntime(chunks=["a", "b", "c"])
-    tokenizer = _FakeTokenizer()
-    llm = MlxLLM(
-        model=_FAKE_MODEL,
-        tokenizer=tokenizer,
-        runtime=runtime,
-        config=GenerationConfig(model="mlx-community/test"),
+    llm = OpenAILLM(
+        completions=_NullyCompletions(),
+        config=GenerationConfig(model="m"),
     )
+    assert list(llm.chat_stream([Message(role="user", content="q")])) == ["hi"]
 
-    assert list(llm.chat_stream([Message(role="user", content="q")])) == ["a", "b", "c"]
+
+# ─── generate ───────────────────────────────────────────────────────────────
 
 
-def test_generation_config_requires_model_name():
+def test_generate_returns_response_text():
+    fake = _FakeCompletions(generate_response="One sentence here.")
+    llm = _build(fake)
+
+    assert llm.generate("Write one sentence.") == "One sentence here."
+
+
+def test_generate_wraps_prompt_as_user_message():
+    fake = _FakeCompletions(generate_response="ok")
+    llm = _build(fake)
+
+    llm.generate("some prompt")
+
+    assert fake.calls[0]["messages"] == [{"role": "user", "content": "some prompt"}]
+
+
+def test_generate_passes_stream_false():
+    fake = _FakeCompletions(generate_response="ok")
+    llm = _build(fake)
+
+    llm.generate("prompt")
+
+    assert fake.calls[0]["stream"] is False
+
+
+def test_generate_returns_empty_string_on_none_content():
+    class _NoneContent:
+        def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=None))])
+
+    llm = OpenAILLM(completions=_NoneContent(), config=GenerationConfig(model="m"))
+    assert llm.generate("prompt") == ""
+
+
+# ─── GenerationConfig ───────────────────────────────────────────────────────
+
+
+def test_generation_config_requires_non_empty_model():
     with pytest.raises(ValueError):
         GenerationConfig(model="")
+
+
+def test_generation_config_defaults():
+    cfg = GenerationConfig(model="some-model")
+    assert cfg.temperature == pytest.approx(0.2)
+    assert cfg.num_ctx == 8192

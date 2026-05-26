@@ -1,13 +1,14 @@
 """End-to-end tests for the FastAPI app.
 
 The Services dataclass is injected with fakes so tests don't need
-MLX, ChromaDB, BGE-M3, or a cross-encoder running.
+mlx-lm, ChromaDB, mlx-embeddings, or a live inference server running.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Sequence
+import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -16,9 +17,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import Settings
-from backend.llm import GenerationConfig, MlxLLM
+from backend.llm import GenerationConfig, OpenAILLM
 from backend.main import Services, create_app
-from backend.reranker import CrossEncoderReranker
+from backend.reranker import LogProbReranker
 from backend.retriever import HybridRetriever
 
 # ---------- Fakes ----------
@@ -58,32 +59,43 @@ class _FakeEmbedder:
         return [[1.0, 2.0, 3.0] for _ in texts]
 
 
-class _FakeTokenizer:
-    def apply_chat_template(self, messages, *, add_generation_prompt, tokenize):
-        return "\n".join(f"{m['role']}:{m['content']}" for m in messages)
+def _logprob_response(prob: float) -> Any:
+    lp = SimpleNamespace(token="Ja", logprob=math.log(max(prob, 1e-9)))
+    content_item = SimpleNamespace(top_logprobs=[lp])
+    return SimpleNamespace(
+        choices=[SimpleNamespace(logprobs=SimpleNamespace(content=[content_item]))]
+    )
+
+
+def _stream_chunk(text: str) -> Any:
+    return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=text))])
+
+
+def _non_stream_response(text: str) -> Any:
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
 
 
 @dataclass
-class _FakeMlxRuntime:
+class _FakeCompletions:
+    """Fake ChatCompletionAPI used by both OpenAILLM and LogProbReranker."""
+
     main_chunks: list[str] = field(default_factory=list)
     helper_response: str = ""
+    # Maps chunk text → relevance probability (0.0–1.0)
+    score_map: dict[str, float] = field(default_factory=dict)
 
-    def stream_generate(
-        self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int
-    ) -> Iterator[Any]:
-        for token in self.main_chunks:
-            yield SimpleNamespace(text=token)
-
-    def generate(self, *, model: Any, tokenizer: Any, prompt: str, max_tokens: int) -> str:
-        return self.helper_response
-
-
-@dataclass
-class _FakeScorer:
-    score_map: dict[str, float]
-
-    def score(self, pairs):
-        return [self.score_map.get(t, 0.5) for _, t in pairs]
+    def create(self, *, model, messages, stream, max_tokens, temperature, **kwargs):
+        if stream:
+            return [_stream_chunk(t) for t in self.main_chunks]
+        # Reranker calls: single-token, logprobs requested
+        if max_tokens == 1 and kwargs.get("logprobs"):
+            content = messages[-1]["content"]
+            for text, prob in self.score_map.items():
+                if text in content:
+                    return _logprob_response(prob)
+            return _logprob_response(0.0)
+        # Helper generate call
+        return _non_stream_response(self.helper_response)
 
 
 def _build_services(
@@ -117,20 +129,14 @@ def _build_services(
     embedder = _FakeEmbedder()
     retriever = HybridRetriever(collection=chroma, bm25=bm25, embedder=embedder)
 
-    scorer = _FakeScorer(score_map=score_map or {})
-    reranker = CrossEncoderReranker(scorer=scorer, threshold=threshold)
-
-    runtime = _FakeMlxRuntime(
+    fake = _FakeCompletions(
         main_chunks=main_chunks if main_chunks is not None else ["Hallo ", "Welt", "."],
         helper_response="alt 1\nalt 2",
+        score_map=score_map or {},
     )
-    tokenizer = _FakeTokenizer()
-    llm = MlxLLM(
-        model=object(),
-        tokenizer=tokenizer,
-        runtime=runtime,
-        config=GenerationConfig(model="mlx-community/test"),
-    )
+    cfg = GenerationConfig(model="test-model")
+    llm = OpenAILLM(completions=fake, config=cfg)
+    reranker = LogProbReranker(completions=fake, model="test-model", threshold=threshold)
 
     return Services(
         settings=settings,
@@ -248,7 +254,7 @@ def test_chat_sources_event_contains_top_hits_with_scores():
     sources = events["sources"]
     assert isinstance(sources, list)
     assert any(s["chunk_id"] == "spd_p12_c0" for s in sources)
-    assert any(s["score"] == pytest.approx(0.9) for s in sources)
+    assert any(s["score"] == pytest.approx(0.9, abs=1e-6) for s in sources)
 
 
 def test_chat_below_threshold_emits_empty_sources_and_skips_tokens():

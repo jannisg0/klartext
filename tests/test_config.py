@@ -12,19 +12,16 @@ from backend.config import Settings
 
 
 def test_settings_defaults(monkeypatch: pytest.MonkeyPatch):
-    # Stop any .env from leaking through.
     for var in [
         "LLM_BACKEND",
-        "MLX_MODEL_LLM",
-        "MLX_MODEL_RERANKER",
+        "OMLX_BASE_URL",
+        "OMLX_MODEL",
         "MLX_MAX_TOKENS",
         "OLLAMA_HOST",
         "OLLAMA_MODEL_MAIN",
         "OLLAMA_MODEL_HELPER",
+        "EMBEDDING_MODEL_MLX",
         "CHROMADB_PATH",
-        "EMBEDDING_MODEL",
-        "RERANKER_MODEL",
-        "EMBEDDING_DEVICE",
         "RETRIEVAL_TOP_K_DENSE",
         "RETRIEVAL_TOP_K_SPARSE",
         "RERANK_TOP_K",
@@ -39,16 +36,14 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch):
     s = Settings(_env_file=None)  # type: ignore[call-arg]
 
     assert s.llm_backend == "mlx"
-    assert s.mlx_model_llm == "mlx-community/gemma-4-e4b-it-OptiQ-4bit"
-    assert s.mlx_model_reranker == "mlx-community/bge-reranker-v2-m3-4bit"
+    assert s.omlx_base_url == "http://localhost:8000/v1"
+    assert s.omlx_model == "mlx-community/gemma-4-e4b-it-OptiQ-4bit"
     assert s.mlx_max_tokens == 1024
     assert s.ollama_host == "http://localhost:11434"
     assert s.ollama_model_main == "qwen3:14b"
     assert s.ollama_model_helper == "qwen3:4b"
+    assert s.embedding_model_mlx == "mlx-community/bge-m3-mlx-8bit"
     assert str(s.chromadb_path) == "chromadb"
-    assert s.embedding_model == "BAAI/bge-m3"
-    assert s.reranker_model == "BAAI/bge-reranker-v2-m3"
-    assert s.embedding_device == "mps"
     assert s.retrieval_top_k_dense == 30
     assert s.retrieval_top_k_sparse == 30
     assert s.rerank_top_k == 5
@@ -61,7 +56,8 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch):
 
 def test_settings_reads_environment_variables(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("LLM_BACKEND", "ollama")
-    monkeypatch.setenv("MLX_MODEL_LLM", "mlx-community/Qwen3.5-4B-MLX-4bit")
+    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:9000/v1")
+    monkeypatch.setenv("OMLX_MODEL", "mlx-community/Qwen3.5-4B-MLX-4bit")
     monkeypatch.setenv("MLX_MAX_TOKENS", "2048")
     monkeypatch.setenv("OLLAMA_MODEL_MAIN", "qwen3:27b")
     monkeypatch.setenv("RERANK_SCORE_THRESHOLD", "0.45")
@@ -71,7 +67,8 @@ def test_settings_reads_environment_variables(monkeypatch: pytest.MonkeyPatch):
     s = Settings(_env_file=None)  # type: ignore[call-arg]
 
     assert s.llm_backend == "ollama"
-    assert s.mlx_model_llm == "mlx-community/Qwen3.5-4B-MLX-4bit"
+    assert s.omlx_base_url == "http://localhost:9000/v1"
+    assert s.omlx_model == "mlx-community/Qwen3.5-4B-MLX-4bit"
     assert s.mlx_max_tokens == 2048
     assert s.ollama_model_main == "qwen3:27b"
     assert s.rerank_score_threshold == pytest.approx(0.45)
