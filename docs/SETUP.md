@@ -10,8 +10,8 @@ Vom Klon bis zur ersten Antwort im Browser.
 - **macOS auf Apple Silicon** (M1/M2/M3/M4) — MLX läuft nur dort.
 - **16 GB RAM** als Untergrenze. Bei 8 GB Modell-Wechsel zu kleineren
   Quants nötig.
-- **~10 GB freier Disk** für Modelle (BGE-M3 ~1.2 GB, Cross-Encoder
-  ~0.6 GB, qwen3.5:2b-mlx ~3 GB, ChromaDB-Index pro Manifesto ~50 MB).
+- **~6 GB freier Disk** für Modelle (BGE-M3 MLX ~0.6 GB,
+  qwen3.5:2b-mlx ~3 GB, ChromaDB-Index pro Manifesto ~50 MB).
 - **`brew`** für die Tooling-Installation.
 
 ---
@@ -32,11 +32,11 @@ LLM-Runner inkl. nativer MLX-Engine.
 ```bash
 git clone git@github.com:jannisg0/klartext.git
 cd klartext
-uv sync                  # erstellt .venv, installiert mlx-lm, FlagEmbedding, etc.
+uv sync                  # erstellt .venv, installiert mlx-lm, mlx-embeddings, openai, etc.
 uv run pre-commit install
 ```
 
-`uv sync` zieht `mlx-lm`, `mlx-embeddings`, `FlagEmbedding`, ChromaDB,
+`uv sync` zieht `mlx-lm`, `mlx-embeddings`, `openai`, ChromaDB,
 FastAPI, ragas + alle Test-Deps in ~1 min.
 
 ---
@@ -65,7 +65,7 @@ Wichtigste Knobs (komplette Liste in `.env.example`):
 
 | Variable | Default | Zweck |
 |----------|---------|-------|
-| `LLM_BACKEND` | `ollama` | `ollama` (MLX-Runner) oder `mlx` (direkt mlx-lm) |
+| `LLM_BACKEND` | `ollama` | `mlx` → mlx-lm Server auf `OMLX_BASE_URL`; `ollama` → Ollama OpenAI-Gateway |
 | `OLLAMA_MODEL_MAIN` | `qwen3.5:2b-mlx` | Antwort-LLM |
 | `OLLAMA_MODEL_HELPER` | `qwen3.5:2b-mlx` | Enrichment + Query-Expansion |
 | `RERANK_TOP_K` | `3` | Chunks im LLM-Prompt |
@@ -117,21 +117,20 @@ sofort.
 ## 6. Backend starten
 
 ```bash
-uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-Erster Start läd Cross-Encoder (Fallback auf sentence-transformers,
-~0.6 GB). Health-Check:
+Health-Check:
 
 ```bash
-curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8001/health
 # {"status":"ok","ollama":true,"chromadb":true,"bm25":true,"chunks":62}
 ```
 
 Smoke-Test:
 
 ```bash
-curl -N -s -X POST http://127.0.0.1:8000/chat \
+curl -N -s -X POST http://127.0.0.1:8001/chat \
   -H "Content-Type: application/json" \
   -d '{"query":"Was sagt die SPD zur Bildungspolitik?","party_filter":["spd"]}' \
   --max-time 60

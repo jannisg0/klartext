@@ -74,7 +74,7 @@ ollama pull qwen3.5:2b-mlx
 cp .env.example .env
 # PDFs in data/manifestos/<party>.pdf ablegen
 uv run python -m scripts.ingest
-uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8001
 # in zweitem Terminal:
 cd frontend && npm install && npm run dev
 ```

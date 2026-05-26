@@ -90,7 +90,7 @@ sendet (siehe [`API.md`](API.md)).
    (ignoriert Backend).
 2. `VITE_USE_MOCKS=true` per env → erzwungener Mock (für Storybook /
    offline-Demos).
-3. Sonst: `fetch('http://127.0.0.1:8000/chat', {body, signal})` mit
+3. Sonst: `fetch('http://127.0.0.1:8001/chat', {body, signal})` mit
    Streaming-Response, manuelle SSE-Parsing.
 
 ### CRLF-Normalisierung (kritisch)

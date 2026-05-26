@@ -123,17 +123,18 @@ wäre.
 
 ---
 
-## "Port 5173 / 8000 is already in use"
+## "Port 5173 / 8000 / 8001 is already in use"
 
-**Symptom:** Vite oder Uvicorn schmeißt bei Start einen Bind-Error.
+**Symptom:** Vite, mlx-lm Server oder Uvicorn schmeißt bei Start einen Bind-Error.
 
 **Ursache:** Ein Zombie-Prozess hält noch den Port (oft eine alte
 Background-Session).
 
 **Fix:**
 ```bash
-lsof -nP -iTCP:5173 -sTCP:LISTEN     # zeigt PID
-lsof -nP -iTCP:8000 -sTCP:LISTEN
+lsof -nP -iTCP:5173 -sTCP:LISTEN     # Vite Frontend
+lsof -nP -iTCP:8000 -sTCP:LISTEN     # mlx-lm Inference-Server
+lsof -nP -iTCP:8001 -sTCP:LISTEN     # FastAPI Backend
 kill <PID>
 ```
 

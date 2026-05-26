@@ -6,7 +6,7 @@ gewählter Politiker:innen (Persona-Modus). Der Name verpflichtet: klare
 Sprache, verifizierte Zitate, keine Halluzinationen.
 
 Ziel ist Pipeline-Qualität auf professionellem Niveau – Hybrid Retrieval,
-Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
+Log-Prob Reranking, Contextual Chunks, ragas-basierte Evaluation.
 
 ---
 
@@ -14,16 +14,14 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
 
 - **Package Manager**: uv (pyproject.toml + uv.lock)
 - **Python**: >=3.11
-- **LLM (MLX, default)**: `mlx-community/gemma-4-e4b-it-OptiQ-4bit` —
-  bedient sowohl Answer-Generation als auch Helper-Rolle (Contextual
-  Enrichment + Query Expansion). Ein Gewichtssatz im Unified-Memory.
-- **LLM (Ollama, Escape Hatch)**: `LLM_BACKEND=ollama` reaktiviert die
-  Legacy-Pipeline (`qwen3:14b` / `qwen3:4b`) — nur für goldset-Vergleiche
-  in Session G; wird danach entfernt.
-- **Embeddings**: BAAI/bge-m3 via FlagEmbedding (dense + sparse aus einem Modell)
-- **Reranker**: `mlx-community/bge-reranker-v2-m3-4bit` (MLX); Fallback
-  auf `BAAI/bge-reranker-v2-m3` via sentence-transformers, wenn der
-  MLX-Quant nicht verfügbar ist.
+- **LLM (MLX, default)**: `mlx-community/gemma-4-e4b-it-OptiQ-4bit` via
+  `mlx-lm --server` (OpenAI-kompatibler Inference-Server auf `:8000`).
+  Ein Gewichtssatz für Answer-Generation und Helper-Rolle.
+- **LLM (Ollama, Escape Hatch)**: `LLM_BACKEND=ollama` — beide Pfade
+  nutzen die OpenAI-SDK gegen den jeweiligen Endpunkt (`/v1`).
+- **Embeddings**: `mlx-community/bge-m3-mlx-8bit` via mlx-embeddings
+- **Reranker**: Log-Prob-Reranker via Chat Completions — kein separates
+  Reranker-Modell, nutzt denselben Inference-Server.
 - **Vector DB**: ChromaDB (lokal, persistiert)
 - **Sparse Index**: rank_bm25 (in-memory, persistiert als pickle)
 - **PDF-Parsing**: PyMuPDF (layout-aware mit Heading-Detection)
@@ -40,16 +38,15 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
 
 ### Ingestion (einmalig pro Datenupdate)
 
-1. **PyMuPDF** parst PDF mit Layout-Infos (Fontsize, Position).
-2. **Heading-Detection**: Top-3 Fontsizes als H1/H2/H3 klassifizieren.
-3. **Document Tree** bauen: `party → section → subsection → paragraphs`.
-4. **Structure-aware Chunking**:
+1. **pymupdf4llm** parst PDF zu strukturiertem Markdown (Headings, Listen,
+   Tabellen) — keine Fontsize-Heuristik.
+2. **Markdown-aware Chunking**:
    - `chunk_size=500` tokens, `overlap=100`
    - NIE über Sektionsgrenzen chunken
    - `section_path` als Metadatum: `"Wirtschaft > Steuerpolitik > Vermögensteuer"`
-5. **Contextual Enrichment** (Anthropic-Methode):
-   - Pro Chunk Call an das Helper-LLM (MLX Gemma 4 E4B, oder Ollama
-     `qwen3:4b` im Escape-Hatch):
+3. **Contextual Enrichment** (Anthropic-Methode):
+   - Pro Chunk Call an das Helper-LLM (OpenAI SDK gegen mlx-lm Server
+     oder Ollama `/v1` im Escape-Hatch):
      ```
      Document-Kontext: {section_path}
      Chunk: {chunk}
@@ -61,11 +58,11 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
      content-basiert. Ein Modellwechsel invalidiert den Cache **nicht**;
      bestehende Enrichments bleiben, neue Chunks bekommen die Sätze vom
      aktuell aktiven Helper-Modell.
-6. **Embedding mit BGE-M3**:
+4. **Embedding mit BGE-M3** (mlx-embeddings, `bge-m3-mlx-8bit`):
    - dense vector → ChromaDB Collection `klartext_manifestos`
    - sparse weights → BM25 Index (Term-Frequencies)
-7. **Metadaten**: `{party, section_path, page, chunk_id, context, source_pdf}`.
-8. **Tweets analog** ohne Chunking → Collection `klartext_tweets`.
+5. **Metadaten**: `{party, section_path, page, chunk_id, context, source_pdf}`.
+6. **Tweets analog** ohne Chunking → Collection `klartext_tweets`.
 
 ### Runtime (pro User-Query)
 
@@ -79,12 +76,12 @@ Cross-Encoder Reranking, Contextual Chunks, ragas-basierte Evaluation.
    - a) Dense via BGE-M3 + ChromaDB → top 30
    - b) Sparse via rank_bm25 → top 30
 4. **RRF Fusion**: alle Listen poolen, Score `1/(60+rank)` summieren, top 30 keepen.
-5. **Cross-Encoder Rerank** mit `bge-reranker-v2-m3`:
-   - `(query, chunk)` Paare scoren
-   - Top 5 keepen
-   - Score < threshold (default `0.3`) → leeres Ergebnis signalisieren
+5. **Log-Prob Reranking** via Chat Completions (kein separates Modell):
+   - Pro Hit: LLM antwortet „Ja/Nein" auf Relevanzfrage
+   - Log-Prob des „Ja"-Tokens = Relevanz-Score
+   - Top 5 keepen, Score < threshold (default `0.2`) → leeres Ergebnis
 6. **Prompt-Konstruktion** (siehe System-Prompts unten).
-7. **LLM-Generation** mit MLX Gemma 4 E4B (`mlx_lm.stream_generate`), streaming.
+7. **LLM-Generation** via OpenAI SDK (`chat_stream`), streaming.
 8. **Citation Verification post-hoc**:
    - Regex `\[(\w+) – Seite (\d+)\]` aus Antwort extrahieren
    - Jede gegen retrieved chunks prüfen
@@ -222,7 +219,7 @@ klartext/
 
 1. `brew install uv git` (Apple Silicon Mac vorausgesetzt)
 2. `git clone <repo> klartext && cd klartext` (oder neu initialisiert)
-3. `uv sync` (zieht `mlx-lm`, `FlagEmbedding` etc.)
+3. `uv sync` (zieht `mlx-lm`, `mlx-embeddings`, `openai` etc.)
 4. `uv run pre-commit install`
 5. `cp .env.example .env` und ggf. anpassen
 6. Wahlprogramm-PDFs in `data/manifestos/` ablegen (`spd.pdf`, `cdu.pdf`, ...)
@@ -231,12 +228,11 @@ klartext/
 9. `uv run python scripts/ingest.py` (erster Lauf zieht das MLX-Modell
    von HuggingFace, ~5 GB; danach im HF-Cache)
 10. `uv run python scripts/eval.py` (Baseline messen)
-11. `uv run uvicorn backend.main:app --reload --port 8000`
+11. `uv run uvicorn backend.main:app --reload --port 8001`
 12. `cd frontend && npm install && npm run dev`
 
-Escape-Hatch: `LLM_BACKEND=ollama` setzen, `ollama serve` starten und
-`ollama pull qwen3:14b qwen3:4b` — reaktiviert die Legacy-Pipeline für
-goldset-Vergleiche.
+Escape-Hatch: `LLM_BACKEND=ollama` setzen, `ollama serve` starten —
+OpenAI SDK zeigt dann auf `OLLAMA_HOST/v1` statt auf den mlx-lm Server.
 
 ---
 
@@ -251,11 +247,11 @@ Nach dem Init kommt der eigentliche Code in 8 fokussierten Sessions:
   Inkl. Caching via SHA256. Erste echte Ingestion-Tests mit 1-2 PDFs in
   `data/manifestos/`.
 - **Session C**: `backend/retriever.py` + `backend/reranker.py`. Hybrid
-  Retrieval (dense + sparse + RRF) + Cross-Encoder Rerank. Unit-Tests inkl.
+  Retrieval (dense + sparse + RRF) + Log-Prob Reranking. Unit-Tests inkl.
   RRF Edge Cases.
 - **Session D**: `backend/prompt_builder.py` + `backend/llm.py`
-  + `backend/citation_verifier.py`. Neutral + Persona Modus, Ollama Wrapper,
-  Citation Check.
+  + `backend/citation_verifier.py`. Neutral + Persona Modus, OpenAI SDK
+  Wrapper, Citation Check.
 - **Session E**: `backend/main.py` + `backend/config.py` + `backend/models.py`.
   FastAPI Endpoints, SSE Streaming, Health Check.
 - **Session F**: Frontend (Vite Setup + React Komponenten + SSE Client).
@@ -282,5 +278,5 @@ uv run ruff format             # Code formatieren
 uv run pre-commit run --all    # Alle Hooks gegen alle Files laufen
 uv run python scripts/ingest.py
 uv run python scripts/eval.py
-uv run uvicorn backend.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8001
 ```

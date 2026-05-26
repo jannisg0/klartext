@@ -1,6 +1,6 @@
 # API-Kontrakt
 
-FastAPI-App in `backend/main.py`. Bindet auf `http://127.0.0.1:8000`
+FastAPI-App in `backend/main.py`. Bindet auf `http://127.0.0.1:8001`
 per Default. CORS-Allow-Origin per `CORS_ORIGIN` env-var
 (`http://localhost:5173` Default für Vite-Dev).
 
