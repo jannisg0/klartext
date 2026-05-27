@@ -87,6 +87,7 @@ class LogProbReranker:
             temperature=0.0,
             logprobs=True,
             top_logprobs=5,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
         choice = response.choices[0]
         if not choice.logprobs or not choice.logprobs.content:

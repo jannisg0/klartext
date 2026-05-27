@@ -46,6 +46,7 @@ class OpenAILLM:
             stream=True,
             max_tokens=self.config.num_ctx,
             temperature=self.config.temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
         for chunk in stream:
             delta = chunk.choices[0].delta
@@ -59,5 +60,6 @@ class OpenAILLM:
             stream=False,
             max_tokens=self.config.num_ctx,
             temperature=self.config.temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
         return response.choices[0].message.content or ""
