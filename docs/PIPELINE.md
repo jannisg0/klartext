@@ -50,11 +50,11 @@ bekommen Sätze vom neuen Modell.
 
 Toggle: `CONTEXTUAL_ENRICHMENT_ENABLED=true|false`.
 
-### 4. Embedding — BGE-M3 via FlagEmbedding
+### 4. Embedding — BGE-M3 via mlx-embeddings
 
-`BAAI/bge-m3` läuft auf MPS (`EMBEDDING_DEVICE=mps`). Liefert
-dense Vektoren (1024-dim) für ChromaDB. Sparse-Output wird
-**nicht** verwendet — Sparse-Pfad nutzt BM25 stattdessen.
+`mlx-community/bge-m3-mlx-8bit` läuft via `mlx-embeddings` auf Apple
+Silicon. Liefert dense Vektoren (1024-dim) für ChromaDB. Sparse-Output
+wird **nicht** verwendet — Sparse-Pfad nutzt BM25 stattdessen.
 
 ### 5. BM25-Persistenz — `backend/bm25_index.py`
 
@@ -78,9 +78,9 @@ Tweets analog ohne Chunking → Collection `klartext_tweets`.
 
 ### 1. Query Expansion (optional) — `backend/retriever.py:expand_query`
 
-Helper-LLM-Call (qwen3.5:2b-mlx) für 2 Alt-Formulierungen.
-Toggle: `QUERY_EXPANSION_ENABLED`. Default `false` weil der
-zusätzliche LLM-Call ~5–30 s kostet.
+Helper-LLM-Call (`Qwen3.5-2B-OptiQ-4bit` via mlx-lm Server) für 2
+Alt-Formulierungen. Toggle: `QUERY_EXPANSION_ENABLED`. Default `false`
+weil der zusätzliche LLM-Call ~5–30 s kostet.
 
 ### 2. Hybrid Retrieval — `backend/retriever.py:HybridRetriever.retrieve`
 
@@ -98,18 +98,20 @@ Reciprocal Rank Fusion mit `k=60`:
 `score(id) = Σ 1 / (60 + rank_in_list)`.
 Pool aller Listen, sortiert absteigend nach Score, top 30 keepen.
 
-### 4. Cross-Encoder Rerank — `backend/reranker.py`
+### 4. Log-Prob Reranking — `backend/reranker.py`
 
-Default: `mlx-community/bge-reranker-v2-m3-4bit` via
-`mlx-embeddings` (falls verfügbar) ODER `BAAI/bge-reranker-v2-m3`
-via `sentence-transformers` (Fallback).
+Kein separates Reranker-Modell. Nutzt denselben mlx-lm-Server.
 
-`CrossEncoderReranker.rerank(query, hits, top_k=3)`:
-- Score-Sigmoid auf `[0, 1]`.
+`LogProbReranker.rerank(query, hits, top_k=5)`:
+- Pro Hit: LLM-Call mit `max_tokens=1`, `logprobs=True`,
+  `top_logprobs=5`. Frage: „Ist dieser Text relevant für die Frage?
+  Antworte nur Ja oder Nein."
+- Score = `P(Ja) / (P(Ja) + P(Nein))` — normalisiert über Ja/Nein-Masse,
+  damit Thinking-Tokens nicht den Score verwässern.
+- `extra_body={"chat_template_kwargs": {"enable_thinking": False}}`
+  deaktiviert Thinking-Modus bei Qwen3/Gemma-Modellen.
 - Drop Hits mit Score < `RERANK_SCORE_THRESHOLD` (default `0.2`).
 - Wenn Top-Hit < Threshold → `below_threshold=True` Signal.
-- `top_k=3` ist tuned auf small-LLM-Prompt-Budget (ehemals 5,
-  reduziert weil 2B-Modelle bei großem Prompt langsam werden).
 
 ### 5. Prompt-Konstruktion — `backend/prompt_builder.py`
 
@@ -130,19 +132,16 @@ Conversation-History wird auf `MAX_HISTORY=10` Messages gekappt.
 
 ### 6. LLM-Streaming — `backend/llm.py`
 
-`OllamaLLM.chat_stream(messages)`:
-- `ollama.chat(stream=True, think=False, options={temperature,
-  num_ctx})`.
-- **`think=False` ist kritisch**: Thinking-fähige Modelle (gemma4,
-  qwen3) verbrennen sonst 30–150 s im internen CoT vor dem ersten
-  Token.
+`OpenAILLM.chat_stream(messages)`:
+- OpenAI SDK gegen `mlx-lm --server` auf `:8000/v1` (MLX-Default)
+  oder gegen Ollama-OpenAI-Gateway (Escape-Hatch).
+- `extra_body={"chat_template_kwargs": {"enable_thinking": False}}`
+  deaktiviert Thinking-Modus — **kritisch**, sonst denken Qwen3/Gemma-
+  Modelle 30–150 s intern bevor das erste Token kommt.
+- Yielded werden nur nicht-leere `delta.content`-Strings.
 
-Yielded werden nur nicht-leere `chunk.message.content`-Strings;
-Sentinel `chunk.done` terminiert.
-
-MLX-Pfad (`MlxLLM`) nutzt `mlx_lm.stream_generate` direkt — derzeit
-durch Ollama-MLX-Runner ersetzt weil Ollama Multi-Modal-Modelle
-(z.B. `gemma4:e4b-mlx`) lädt, die `mlx_lm.load` nicht parst.
+Escape-Hatch: `LLM_BACKEND=ollama` zeigt denselben `OpenAILLM` auf
+Ollalas `/v1`-Endpoint. Kein separates `OllamaLLM`-Klasse nötig.
 
 ### 7. Citation Verification — `backend/citation_verifier.py`
 

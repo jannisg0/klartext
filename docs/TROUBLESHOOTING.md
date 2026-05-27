@@ -17,13 +17,15 @@ führen vor dem ersten User-Token einen internen Chain-of-Thought-
 Pass aus. Bei einem 8B-Modell mit 1000-Token-Prompt kostet das
 60–150 s.
 
-**Fix:** Im Code bereits gesetzt — `think=False` in
-`backend/llm.py:OllamaLLM.chat_stream`. Sicherstellen, dass die
-Datei aktuell ist (`git log -- backend/llm.py | head` sollte
-`fix(api): disable thinking mode on Ollama LLM calls` enthalten).
+**Fix:** Im Code bereits gesetzt — `extra_body={"chat_template_kwargs":
+{"enable_thinking": False}}` in allen `completions.create()`-Calls in
+`backend/llm.py` und `backend/reranker.py`. Sicherstellen, dass die
+Dateien aktuell sind (`git log -- backend/llm.py | head` sollte
+`fix(llm): disable thinking mode via extra_body for all completions calls`
+enthalten).
 
-Wer trotzdem CoT-fähig will: `think=True` setzen und Akzept-
-Latenz auf ~3 min hochfahren.
+Wer trotzdem CoT will: `enable_thinking: True` setzen und Latenz
+auf ~3 min hochfahren.
 
 ---
 
@@ -84,44 +86,20 @@ deinem System auftritt: Code-Stand prüfen
 
 ---
 
-## `ValueError: Received 126 parameters not in model: language_model.model.layers.X...`
+## `ValueError: Received 126 parameters not in model`
 
-**Symptom:** Backend crasht beim Lifespan-Start nach dem MLX-Modell-
-Download.
+**Symptom:** `mlx_lm.server` crasht beim Start.
 
-**Ursache:** Das Modell, das geladen werden sollte, ist ein **VLM
-(Vision-Language-Model)** — z. B. `mlx-community/gemma-4-e4b-it-
-OptiQ-4bit`. Gewichte liegen unter `language_model.model.*` und
-`mlx-lm` versteht das Layout nicht.
+**Ursache:** Multimodales Modell (VLM) — Gewichte unter
+`language_model.model.*` statt `model.layers.*`. `mlx-lm` versteht
+das Layout nicht.
 
-**Fix:**
-1. **Empfohlen:** `LLM_BACKEND=ollama` setzen + MLX-tagged Ollama-
-   Modell (`gemma4:e4b-mlx`, `qwen3.5:2b-mlx`). Ollama-MLX-Runner
-   versteht VLMs out-of-the-box (auch wenn wir nur den Text-Anteil
-   nutzen).
-2. **Oder:** ein reines LLM-MLX-Modell als `MLX_MODEL_LLM` setzen
-   (z. B. `mlx-community/qwen3.5-2b-instruct-mlx`).
+**Fix:** Anderes Modell wählen. Empfohlen: `mlx-community/Qwen3.5-2B-OptiQ-4bit`
+(reines LLM, kein VLM). Oder `LLM_BACKEND=ollama` + Ollama-MLX-Runner
+der VLMs unterstützt.
 
 ---
 
-## `mlx-community/bge-reranker-v2-m3-4bit not found on HF`
-
-**Symptom:** Backend-Log:
-```
-reranker.mlx_load_failed model=mlx-community/bge-reranker-v2-m3-4bit
-error='Model not found for path or HF repo: ...'
-```
-Danach: `reranker.st_loaded model=BAAI/bge-reranker-v2-m3`.
-
-**Ursache:** Es gibt keine offizielle 4-Bit-MLX-Konvertierung dieses
-Rerankers auf HuggingFace (Stand 2026).
-
-**Fix:** **Nicht nötig**. Das ist ein erwarteter Fallback — die
-ST-Variante (BAAI/bge-reranker-v2-m3 via sentence-transformers
-auf MPS) ist auf Apple Silicon nicht langsamer als die MLX-Variante
-wäre.
-
----
 
 ## "Port 5173 / 8000 / 8001 is already in use"
 
@@ -160,13 +138,17 @@ einen HF-Token in der Umgebung setzen (`HF_TOKEN=...`).
 **Ursachen-Checklist:**
 1. **Ingest gelaufen?** `curl /health | jq .chunks` — wenn 0, dann
    `uv run python -m scripts.ingest` ausführen.
-2. **Threshold zu strikt?** `RERANK_SCORE_THRESHOLD` in `.env` auf
-   `0.2` setzen (Default neu) statt `0.3`.
-3. **`top_k=1`** zu eng? `RETRIEVAL_TOP_K_DENSE` und
-   `RETRIEVAL_TOP_K_SPARSE` sollten ≥10 sein.
-4. **Party-Filter zu eng?** Wenn nur SPD ingestet ist und User filtert
+2. **mlx-lm-Server läuft?** Log-Prob-Reranker schlägt lautlos fehl
+   wenn `:8000` down ist → alle Scores 0.0 → `below_threshold`.
+   `curl http://localhost:8000/v1/models` prüfen.
+3. **Thinking-Modus aktiv?** `extra_body` fehlt oder wird vom Server
+   ignoriert → „Thinking"-Token statt „Ja/Nein" → Score 0.0.
+   Backend-Log zeigt `chat.empty_context below_threshold=True`.
+4. **Threshold zu strikt?** `RERANK_SCORE_THRESHOLD` in `.env` auf
+   `0.2` setzen.
+5. **Party-Filter zu eng?** Wenn nur SPD ingestet ist und User filtert
    auf CDU → no hits. Auf "alle" stellen oder weitere PDFs ingesten.
-5. **SSE-Parser-Bug** (siehe oben) — wenn curl Tokens zeigt aber
+6. **SSE-Parser-Bug** (siehe oben) — wenn curl Tokens zeigt aber
    Frontend nicht, ist es CRLF.
 
 ---
@@ -179,6 +161,5 @@ einen HF-Token in der Umgebung setzen (`HF_TOKEN=...`).
 **Fix:** `uv run uvicorn ... --log-level debug` für vollständigen
 Trace. Häufige Auslöser:
 - ChromaDB-Collection leer (siehe oben Ingest).
-- Ollama-Server nicht erreichbar (`ollama serve` läuft?).
-- Cross-Encoder-Modell konnte nicht geladen werden
-  (Disk voll / HF-Cache korrupt).
+- mlx-lm-Server nicht erreichbar (`uv run mlx_lm.server ...` läuft auf `:8000`?).
+- BGE-M3-Modell konnte nicht geladen werden (Disk voll / HF-Cache korrupt).

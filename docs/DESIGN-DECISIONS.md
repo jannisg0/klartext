@@ -6,41 +6,38 @@ aufgegeben haben.
 
 ---
 
-## 1. MLX via Ollama-MLX-Runner statt direkt `mlx-lm`
+## 1. `mlx-lm --server` statt Ollama-MLX-Runner
 
-**Problem:** Ursprünglich war `mlx_lm.load(...)` der direkte Pfad.
-Funktioniert für klassische LLMs, aber das vom Nutzer gewünschte
-`gemma4:e4b` ist multimodal — die Gewichte liegen unter
-`language_model.model.layers.*` statt `model.layers.*`. `mlx-lm`
-crasht beim Laden mit `ValueError: Received 126 parameters not in
-model`.
+**Problem:** Ursprünglich Ollama-MLX-Runner (`qwen3.5:2b-mlx` via
+`ollama serve`). Vorteil war, dass Ollama VLMs (z. B. `gemma4:e4b-mlx`)
+versteht die `mlx-lm` nicht parst. Nachteil: extra Prozess,
+`think=False` als Ollama-spezifisches Flag, kein Standard-API-Vertrag.
 
-**Lösung:** Ollama hat seit v0.19 einen nativen MLX-Runner. Tags
-wie `gemma4:e4b-mlx`, `qwen3.5:2b-mlx` werden auf Apple Silicon
-direkt via MLX ausgeführt, ohne dass wir den Loader im Code anfassen.
-Wir setzen `LLM_BACKEND=ollama` mit MLX-Tags als Modellnamen.
+**Lösung:** `mlx-lm --server` auf `:8000` exponiert einen OpenAI-
+kompatiblen Endpunkt. Backend nutzt OpenAI SDK — ein `OpenAILLM`
+deckt MLX-Default und Ollama-Escape-Hatch ab (nur `base_url` wechselt).
+Thinking-Modus wird via `extra_body={"chat_template_kwargs":
+{"enable_thinking": False}}` deaktiviert — derselbe Mechanismus
+funktioniert für Qwen3, Gemma und jeden anderen Thinking-fähigen
+mlx-lm-Modell.
 
-**Trade-off:** Ollama-Layer ist ein extra Prozess + HTTP-Overhead
-zwischen unserem Backend und dem Modell. Auf Apple Silicon
-vernachlässigbar (~50 ms pro Request). `MlxLLM`-Klasse bleibt im
-Code für direkte mlx-lm-Nutzung wenn jemand das später wieder
-braucht.
+**Trade-off:** VLMs (`gemma4:e4b`) brauchen Escape-Hatch via Ollama.
+Pure LLM-Quants (`Qwen3.5-2B-OptiQ-4bit`) laufen direkt.
 
 ---
 
-## 2. qwen3.5:2b-mlx als Default-LLM
+## 2. `Qwen3.5-2B-OptiQ-4bit` als Default-LLM
 
 **Problem:** `qwen3:14b` (~9 GB) auf 16 GB Mac liefert hochwertige
-Antworten, braucht aber 170–300 s Wall-Time für eine Frage —
-unbenutzbar. `gemma4:e4b-mlx` (~9.6 GB, MoE) ist
-qualitativ ähnlich aber selbst mit `think=False` ~30 s TTFB wegen
-großer Prompt-Eval.
+Antworten, braucht aber 170–300 s Wall-Time — unbenutzbar. Größere
+MoE-Modelle qualitativ ähnlich aber selbst mit deaktiviertem Thinking
+~30 s TTFB wegen großer Prompt-Eval.
 
-**Lösung:** `qwen3.5:2b-mlx` (3.1 GB) bei ~24 s Wall-Time, ~14 s
-TTFB. Citation-Discipline kommt nicht von alleine — kleinere Modelle
-ignorieren das `[PARTEI – Seite X]`-Format. Daher Few-Shot-Beispiele
-im System-Prompt + explizite Whitelist der erlaubten Citations
-(siehe Punkt 4).
+**Lösung:** `mlx-community/Qwen3.5-2B-OptiQ-4bit` (~2 GB) bei ~24 s
+Wall-Time, ~14 s TTFB. Citation-Discipline kommt nicht von alleine —
+kleinere Modelle ignorieren das `[PARTEI – Seite X]`-Format. Daher
+Few-Shot-Beispiele im System-Prompt + explizite Whitelist der erlaubten
+Citations (siehe Punkt 4).
 
 **Trade-off:** Antworten knapper als bei 14B-Modellen. Quality-vs-
 Speed-Sweet-Spot für interaktiven Chat. `LLM_BACKEND=ollama` +
@@ -48,20 +45,18 @@ Speed-Sweet-Spot für interaktiven Chat. `LLM_BACKEND=ollama` +
 
 ---
 
-## 3. BGE-M3 bleibt PyTorch / MPS, nicht MLX
+## 3. BGE-M3 via `mlx-embeddings`
 
-**Problem:** Konsistenz im Stack — "alles auf MLX" — würde auch das
-Embedding-Modell verlangen. `mlx-embeddings` existiert, aber
-`mlx-community/bge-m3-mlx` ist nicht offiziell publiziert; auf HF
-auffindbare Konvertierungen sind selten und nicht durchgehend
-geprüft.
+**Problem:** `BAAI/bge-m3` via `FlagEmbedding` (PyTorch/MPS) war der
+ursprüngliche Pfad — funktioniert, aber PyTorch-Abhängigkeit im sonst-
+MLX-Stack. `mlx-community/bge-m3-mlx-8bit` ist inzwischen auf HF
+verfügbar und geprüft.
 
-**Lösung:** `BAAI/bge-m3` läuft via `FlagEmbedding` auf MPS — auf
-Apple Silicon ~80 ms pro Query-Embedding. Kein Bottleneck.
+**Lösung:** `mlx-embeddings` mit `bge-m3-mlx-8bit` — ~80 ms pro
+Query-Embedding, kein PyTorch mehr im kritischen Pfad.
 
-**Trade-off:** Eine PyTorch-Abhängigkeit für sonst-MLX-Stack. Akzeptabel,
-weil Embedding nur einmal pro Query (statt 700× pro Token-Stream)
-läuft.
+**Trade-off:** Minimaler Umbau beim Ingest (andere API-Signatur), sonst
+gleiche Embedding-Qualität (gleiche Gewichte, 8-bit-Quant).
 
 ---
 
@@ -100,20 +95,21 @@ Chunk landet im LLM-Prompt. Bei `top_k=5` × 500 Tokens =
 
 ---
 
-## 6. `think=False` auf Ollama-Calls
+## 6. Thinking-Modus via `extra_body` deaktivieren
 
-**Problem:** Gemma 4 und Qwen3-Familie expose ein "thinking"-Feature
-— internes Chain-of-Thought-Pass vor der eigentlichen Antwort. Für
-RAG mit strikten Citation-Regeln **bringt CoT keinen Mehrwert**, kostet
-aber 30–150 s zusätzliche TTFB.
+**Problem:** Qwen3 und Gemma-Modelle starten jeden Chat-Turn mit einem
+internen Chain-of-Thought-Pass. Für RAG mit strikten Citation-Regeln
+**bringt CoT keinen Mehrwert**, kostet aber 30–150 s TTFB. Kritischer:
+beim Log-Prob-Reranker liefert `max_tokens=1` dann „Thinking" als ersten
+Token statt „Ja/Nein" → Score 0.0 für alle Chunks → `below_threshold`.
 
-**Lösung:** `ollama.chat(..., think=False)` in
-`backend/llm.py:OllamaLLM.chat_stream`. Modelle ohne thinking-Feature
-ignorieren das Flag.
+**Lösung:** `extra_body={"chat_template_kwargs": {"enable_thinking": False}}`
+in allen `completions.create()`-Calls — `llm.py:chat_stream`,
+`llm.py:generate`, `reranker.py:_score`. Funktioniert für alle
+mlx-lm-Modelle die Qwen3/Gemma-Chat-Templates nutzen.
 
-**Trade-off:** Bei sehr komplexen Multi-Step-Fragen wäre CoT
-hilfreich. Bei "Was sagt SPD zu X" reicht direkter Lookup +
-Synthese — kein CoT nötig.
+**Trade-off:** Bei sehr komplexen Multi-Step-Fragen wäre CoT hilfreich.
+Bei "Was sagt SPD zu X" reicht direkter Lookup + Synthese.
 
 ---
 
@@ -171,7 +167,8 @@ nützlich für Storybook-Demos und Offline-Design-Review.
 
 Weitere Details zu jedem Punkt siehe Modulen direkt:
 
-- `backend/llm.py` (think=False, MlxLLM, OllamaLLM)
+- `backend/llm.py` (enable_thinking=False, OpenAILLM)
+- `backend/reranker.py` (Log-Prob Ja/Nein, extra_body)
 - `backend/prompt_builder.py` (Whitelist, Few-Shot)
 - `backend/main.py` (Threadpool, SSE-Event-Reihenfolge)
 - `frontend/src/api/chatStream.js` (Mock-Seam, CRLF)

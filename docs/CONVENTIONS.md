@@ -38,7 +38,7 @@ erzeugen dieselben IDs → keine Duplikate in ChromaDB.
   `E,F,I,B,UP,SIM,RUF` minus `RUF001/002/003` weil deutsche
   Umlaute und en-dashes intentional sind).
 - **Tests:** `pytest`, async-mode=auto. Mocks via Protocol-Injection
-  (keine `unittest.mock`-Magie), Tests sind hardcoded auf 98 grün.
+  (keine `unittest.mock`-Magie), 112 Tests.
 - **Logging:** `structlog` mit JSON-Output nach `logs/klartext.log`.
 - **Conversation-History:** server-side gekappt auf 10 Messages
   (`MAX_HISTORY` in `backend/prompt_builder.py`).
@@ -103,7 +103,7 @@ Pre-commit Hooks (`.pre-commit-config.yaml`):
 - `backend/` — alle Pipeline-Module + FastAPI-App
 - `frontend/src/` — React + State + SSE-Client
 - `scripts/` — One-shot CLIs (`ingest.py`, `eval.py`)
-- `tests/` — Pytest-Suite, fasst alle Module ab (98 Tests)
+- `tests/` — Pytest-Suite, fasst alle Module ab (112 Tests)
 - `data/` — `manifestos/` (PDFs, gitignored), `tweets/` (gitignored
   außer `_example.json`), `eval/goldset.json` (gitignored)
 - `chromadb/` — Persistenz-Output, Inhalte gitignored

@@ -39,7 +39,7 @@ RUNTIME           │  User-Query                                             �
                   │                     Sparse (BM25)              │       │
                   │     │                                          │       │
                   │     ▼                                          │       │
-                  │  RRF-Fusion  ──►  Cross-Encoder Rerank  ──►  Top-K     │
+                  │  RRF-Fusion  ──►  Log-Prob Rerank (Ja/Nein)  ──►  Top-K │
                   │                                                │       │
                   │     ┌──────────────────────────────────────────┘       │
                   │     ▼                                                  │
@@ -47,7 +47,7 @@ RUNTIME           │  User-Query                                             �
                   │                  Whitelist + Few-Shot                  │
                   │     │                                                  │
                   │     ▼                                                  │
-                  │  MLX-LLM-Streaming (qwen3.5:2b-mlx via Ollama-MLX)     │
+                  │  OpenAILLM-Streaming (Qwen3.5-2B via mlx-lm Server)    │
                   │     │                                                  │
                   │     ▼                                                  │
                   │  Citation Verifier (post-hoc Regex-Check)              │
@@ -68,9 +68,9 @@ RUNTIME           │  User-Query                                             �
 | **Enricher** | `backend/enricher.py` | Contextual Enrichment via Helper-LLM, SHA256-Cache |
 | **BM25-Index** | `backend/bm25_index.py` | Sparse-Index, Pickle-Persistenz |
 | **Retriever** | `backend/retriever.py` | Hybrid Retrieval (dense + sparse + RRF), party-Filter, Query-Expansion |
-| **Reranker** | `backend/reranker.py` | Cross-Encoder + Threshold-Cutoff, leeres-Ergebnis-Signal |
+| **Reranker** | `backend/reranker.py` | Log-Prob Reranker (Ja/Nein via LLM), Threshold-Cutoff, leeres-Ergebnis-Signal |
 | **Prompt-Builder** | `backend/prompt_builder.py` | Neutral + Persona, Citation-Whitelist + Few-Shot |
-| **LLM** | `backend/llm.py` | `MlxLLM` + `OllamaLLM` (Escape Hatch), Streaming-Chat |
+| **LLM** | `backend/llm.py` | `OpenAILLM` (mlx-lm Default + Ollama Escape-Hatch), Streaming-Chat |
 | **Citation-Verifier** | `backend/citation_verifier.py` | Regex-Extraction + Verify gegen retrieved Hits |
 | **Config** | `backend/config.py` | Pydantic-Settings, alle Knobs aus `.env` |
 | **API** | `backend/main.py` | FastAPI-App, SSE-`/chat`, Health-Probe, Threadpool-Wrap |
@@ -92,8 +92,8 @@ Ingestion-CLI: `scripts/ingest.py`. Eval-CLI: `scripts/eval.py` (Session G, noch
 4. **Retrieval**: für jede Query embed BGE-M3, query ChromaDB
    (`top_k=30`) + BM25 (`top_k=30`), Filter auf `party_filter`.
 5. **RRF-Fusion** poolt alle Listen, Score `1/(60+rank)`, top 30.
-6. **Reranker** scort `(query, chunk)`-Paare per Cross-Encoder
-   (sentence-transformers Fallback) und filtert nach Threshold
+6. **Reranker** scort `(query, chunk)`-Paare per Log-Prob-Ja/Nein-Frage
+   an denselben mlx-lm-Server und filtert nach Threshold
    (`RERANK_SCORE_THRESHOLD=0.2`). Top `RERANK_TOP_K` Hits.
 7. **`sources`-Event** wird sofort gesendet (Frontend kann die
    Sources-Panel füllen während das Modell noch lädt).
@@ -104,9 +104,10 @@ Ingestion-CLI: `scripts/ingest.py`. Eval-CLI: `scripts/eval.py` (Session G, noch
    - **Citation Whitelist** (nur retrieved Pages erlaubt — verhindert
      Page-Leak aus Few-Shot-Beispielen)
    - Retrieved Chunks mit `[PARTEI – Seite X]` Vorspann
-10. **Streaming via MLX-LLM** (`ollama.chat(..., stream=True, think=
-    False)`). `think=False` deaktiviert internen Chain-of-Thought —
-    sonst denkt das Modell vor jedem Token ~150 s.
+10. **Streaming via OpenAILLM** (OpenAI SDK gegen mlx-lm Server).
+    `extra_body={"chat_template_kwargs": {"enable_thinking": False}}`
+    deaktiviert Thinking-Modus — sonst denkt Qwen3/Gemma ~30–150 s
+    vor dem ersten Token.
 11. Jedes Token → `token`-Event über SSE.
 12. **Citation Verifier** parsed nach `done`: Regex
     `[(PARTEI) – Seite (N)]` aus der Antwort, prüft gegen

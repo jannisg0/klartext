@@ -10,8 +10,8 @@ Vom Klon bis zur ersten Antwort im Browser.
 - **macOS auf Apple Silicon** (M1/M2/M3/M4) — MLX läuft nur dort.
 - **16 GB RAM** als Untergrenze. Bei 8 GB Modell-Wechsel zu kleineren
   Quants nötig.
-- **~6 GB freier Disk** für Modelle (BGE-M3 MLX ~0.6 GB,
-  qwen3.5:2b-mlx ~3 GB, ChromaDB-Index pro Manifesto ~50 MB).
+- **~5 GB freier Disk** für Modelle (BGE-M3 MLX ~1.2 GB,
+  Qwen3.5-2B-4bit ~2 GB, ChromaDB-Index pro Manifesto ~50 MB).
 - **`brew`** für die Tooling-Installation.
 
 ---
@@ -19,11 +19,11 @@ Vom Klon bis zur ersten Antwort im Browser.
 ## 1. Tooling installieren
 
 ```bash
-brew install uv ollama git
+brew install uv git
 ```
 
-`uv` für Python-Env (alles wird `uv sync` machen), `ollama` für den
-LLM-Runner inkl. nativer MLX-Engine.
+`uv` für Python-Env. `mlx-lm` wird via `uv sync` aus `pyproject.toml`
+installiert — kein separater Tool-Manager nötig.
 
 ---
 
@@ -41,17 +41,21 @@ FastAPI, ragas + alle Test-Deps in ~1 min.
 
 ---
 
-## 3. Ollama starten + Modell pullen
+## 3. MLX-LLM-Server starten
 
 ```bash
-ollama serve   # läuft im Hintergrund; oder einmalig manuell starten
-ollama pull qwen3.5:2b-mlx          # Default-Modell, ~3 GB
-ollama pull qwen3:14b               # optional, Escape-Hatch
+uv run mlx_lm.server --model mlx-community/Qwen3.5-2B-OptiQ-4bit --port 8000
 ```
 
-Andere brauchbare MLX-Tags: `gemma4:e4b-mlx` (~9.6 GB, langsamer aber
-besser bei komplexen Fragen), `qwen3.5:0.8b-mlx` (~1.2 GB, sehr
-schnell, schwächere Citation-Discipline).
+Erster Start lädt das Modell von HuggingFace (~2 GB, einmalig in HF-Cache).
+Server läuft dann auf `:8000/v1` (OpenAI-kompatibler Endpunkt).
+
+**Escape-Hatch (Ollama):** Wer stattdessen Ollama nutzen will:
+```bash
+brew install ollama && ollama serve
+ollama pull qwen3:14b
+# in .env: LLM_BACKEND=ollama, OLLAMA_MODEL_MAIN=qwen3:14b
+```
 
 ---
 
@@ -65,10 +69,11 @@ Wichtigste Knobs (komplette Liste in `.env.example`):
 
 | Variable | Default | Zweck |
 |----------|---------|-------|
-| `LLM_BACKEND` | `ollama` | `mlx` → mlx-lm Server auf `OMLX_BASE_URL`; `ollama` → Ollama OpenAI-Gateway |
-| `OLLAMA_MODEL_MAIN` | `qwen3.5:2b-mlx` | Antwort-LLM |
-| `OLLAMA_MODEL_HELPER` | `qwen3.5:2b-mlx` | Enrichment + Query-Expansion |
-| `RERANK_TOP_K` | `3` | Chunks im LLM-Prompt |
+| `LLM_BACKEND` | `mlx` | `mlx` → mlx-lm Server auf `OMLX_BASE_URL`; `ollama` → Ollama OpenAI-Gateway |
+| `OMLX_MODEL` | `mlx-community/Qwen3.5-2B-OptiQ-4bit` | Modell-ID für mlx-lm Server |
+| `OLLAMA_MODEL_MAIN` | `qwen3:14b` | Antwort-LLM (Escape-Hatch) |
+| `OLLAMA_MODEL_HELPER` | `qwen3:4b` | Enrichment + Query-Expansion (Escape-Hatch) |
+| `RERANK_TOP_K` | `5` | Chunks im LLM-Prompt |
 | `RERANK_SCORE_THRESHOLD` | `0.2` | Mindestrelevanz (0..1) |
 | `QUERY_EXPANSION_ENABLED` | `false` | Alt-Formulierungen via Helper-LLM |
 | `CONTEXTUAL_ENRICHMENT_ENABLED` | `true` | 1 Kontext-Satz pro Chunk beim Ingest |
@@ -104,8 +109,8 @@ uv run python -m scripts.ingest
 ```
 
 Erster Lauf:
-- BGE-M3 wird von HF geladen (~1.2 GB, einmalig).
-- Pro Chunk ein Helper-LLM-Call für Enrichment (bei 60 Chunks SPD ~5 min).
+- BGE-M3 (`bge-m3-mlx-8bit`) wird von HF geladen (~1.2 GB, einmalig).
+- Pro Chunk ein Helper-LLM-Call für Enrichment (bei 63 Chunks ~5 min).
 - Schreibt `chromadb/chroma.sqlite3`, `chromadb/bm25_index.pkl`,
   `chromadb/enrichment_cache.json`.
 
@@ -157,7 +162,7 @@ der Antwort. Detail siehe [`FRONTEND.md`](FRONTEND.md).
 ## 8. Tests + Linting
 
 ```bash
-uv run pytest -q              # 98 grün
+uv run pytest -q              # 112 grün
 uv run ruff check
 uv run ruff format --check
 ```

@@ -26,7 +26,7 @@ PDF  →  Parser  →  Chunker  →  Contextual Enrichment  →  Embedding
 User-Query  ──►  Hybrid Retrieval (Dense + Sparse + RRF)
                             │
                             ▼
-                    Cross-Encoder Rerank
+                  Log-Prob Rerank (Ja/Nein via LLM)
                             │
                             ▼
               Prompt-Builder (mit Citation Whitelist)
@@ -47,16 +47,16 @@ Volldetail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) und
 
 | Schicht | Komponente |
 |---------|------------|
-| LLM (Default) | `qwen3.5:2b-mlx` via Ollama-MLX-Runner |
-| LLM (Escape Hatch) | `qwen3:14b` via Ollama (`LLM_BACKEND=ollama`) |
-| Embeddings | `BAAI/bge-m3` via FlagEmbedding (MPS) |
-| Reranker | `bge-reranker-v2-m3` via sentence-transformers |
+| LLM (Default) | `mlx-community/Qwen3.5-2B-OptiQ-4bit` via `mlx-lm --server` |
+| LLM (Escape Hatch) | `qwen3:14b` via Ollama OpenAI-Gateway (`LLM_BACKEND=ollama`) |
+| Embeddings | `mlx-community/bge-m3-mlx-8bit` via `mlx-embeddings` |
+| Reranker | Log-Prob (Ja/Nein-Logprobs vom selben LLM, kein extra Modell) |
 | Vector DB | ChromaDB (persistent) |
 | Sparse | `rank_bm25` |
 | Backend | FastAPI + sse-starlette |
 | Frontend | Vite + React + Tailwind (kein TS) |
 | Eval | `ragas` + manuell kuratiertes Goldset (Session G) |
-| Tests | pytest, 98 grün |
+| Tests | pytest, 112 grün |
 
 Warum dieser Stack: [`docs/DESIGN-DECISIONS.md`](docs/DESIGN-DECISIONS.md).
 
@@ -64,18 +64,20 @@ Warum dieser Stack: [`docs/DESIGN-DECISIONS.md`](docs/DESIGN-DECISIONS.md).
 
 ## Quickstart
 
-Voraussetzung: Apple Silicon (M1+), 16 GB RAM, `brew install uv ollama git`.
+Voraussetzung: Apple Silicon (M1+), 16 GB RAM, `brew install uv git`.
 
 ```bash
 git clone git@github.com:jannisg0/klartext.git
 cd klartext
 uv sync
-ollama pull qwen3.5:2b-mlx
 cp .env.example .env
-# PDFs in data/manifestos/<party>.pdf ablegen
+# MLX-LLM-Server starten (Terminal 1):
+uv run mlx_lm.server --model mlx-community/Qwen3.5-2B-OptiQ-4bit --port 8000
+# PDFs in data/manifestos/<party>.pdf ablegen, dann ingestieren:
 uv run python -m scripts.ingest
+# Backend starten (Terminal 2):
 uv run uvicorn backend.main:app --host 127.0.0.1 --port 8001
-# in zweitem Terminal:
+# Frontend starten (Terminal 3):
 cd frontend && npm install && npm run dev
 ```
 
@@ -94,7 +96,7 @@ Voraussetzungen + Konfig-Knobs in [`docs/SETUP.md`](docs/SETUP.md).
 | D | Prompt-Builder + LLM + Citation-Verifier | abgeschlossen |
 | E | FastAPI-App + SSE-Streaming | abgeschlossen |
 | F + F2 | Frontend Design-Integration + Backend-Wiring | abgeschlossen |
-| MLX-Migration | Ollama-MLX-Runner als Default | abgeschlossen |
+| MLX-Migration | mlx-lm Server + OpenAI SDK als Default | abgeschlossen |
 | G | Eval-Skript (ragas) + Goldset | offen |
 | H | Tuning auf Basis Eval-Ergebnissen | offen |
 
